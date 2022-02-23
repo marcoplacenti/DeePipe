@@ -1,1 +1,6 @@
 -e .
+torch
+torchvision
+numpy
+pandas
+opencv-python
