@@ -16,12 +16,13 @@ def set_global_args(args):
     config_file = args.config
     with open(config_file) as infile:
         config_dict = yaml.load(infile, Loader=yaml.SafeLoader)
-    global DATA, TRAINING_HP, WANDB_KEY, PROJECT
+    global DATA, TRAINING_HP, WANDB_KEY, PROJECT, VALIDATION
 
     DATA = config_dict['data']
     TRAINING_HP = config_dict['training']
     #WANDB_KEY = config_dict['wandb']
     PROJECT = config_dict['project']
+    VALIDATION = config_dict['validation']
 
 
 def run():
@@ -34,9 +35,16 @@ def run():
     transform = transforms.Resize((DATA['img-res'][0], DATA['img-res'][1]))
 
     dataset = ImageDataset(
-                    data_dir=DATA['location'], 
+                    data_dir=DATA['location'],
                     transform=transform)
-    dataloader = DataLoader(dataset, batch_size=TRAINING_HP['batch_size'], shuffle=True)
+
+    test_size = int(VALIDATION['test_size'] * len(dataset))
+    train_size = len(dataset) - test_size
+    trainset, testset = torch.utils.data.random_split(dataset, 
+                    [train_size, test_size])
+
+    trainloader = DataLoader(trainset, batch_size=TRAINING_HP['batch_size'], shuffle=True)
+    testloader = DataLoader(testset, batch_size=TRAINING_HP['batch_size'])
 
     if torch.cuda.is_available():
         device = torch.device("cuda")
@@ -48,17 +56,13 @@ def run():
     else:
         in_channels = 1
 
-    net = Net(in_channels=in_channels, num_classes=dataset.get_len()).to(device)
+    net = Net(in_channels=in_channels, num_classes=dataset.get_num_classes()).to(device)
 
     loss_function = nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(net.parameters(), lr=TRAINING_HP['learning_rate'])
 
-
-    #@title Training the model
-
-
     for epoch in range(TRAINING_HP['epochs']):
-        for i, (images,labels) in enumerate(dataloader):
+        for i, (images,labels) in enumerate(trainloader):
             optimizer.zero_grad()
             outputs = net(images)
             loss = loss_function(outputs, labels)
@@ -66,13 +70,13 @@ def run():
             optimizer.step()
             if (i+1) % 100 == 0:
                 print(f"Epoch [{epoch+1}/{TRAINING_HP['epochs']}], " +
-                    f"Step [{i+1}/{len(dataloader)}], Loss: {loss.item()}")
+                    f"Step [{i+1}/{len(trainloader)}], Loss: {loss.item()}")
 
     #@title Evaluating the accuracy of the model
 
     correct = 0
     total = 0
-    for images, labels in dataloader:
+    for images, labels in testloader:
         
         output = net(images)
         _, predicted = torch.max(output,1)

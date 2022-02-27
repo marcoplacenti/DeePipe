@@ -26,7 +26,6 @@ class ImageDataset(Dataset):
         img_path = os.path.join(self.img_dir, self.image_labels.iloc[idx, 0])
         rgb_image = cv2.imread(img_path, cv2.IMREAD_COLOR)
         rgb_image = np.transpose(rgb_image, axes=(2, 0, 1))
-        #image = read_image(img_path)
         image = torch.from_numpy(rgb_image)/255
         label = self.image_labels.iloc[idx, 1]
         if self.transform:
@@ -40,7 +39,7 @@ class ImageDataset(Dataset):
             for idx, dir in enumerate(os.listdir(data_dir)) \
                 for img in os.listdir("/".join([data_dir, dir]))]
 
-    def get_len(self):
+    def get_num_classes(self):
         return len(set(self.image_labels['label']))
 
     
