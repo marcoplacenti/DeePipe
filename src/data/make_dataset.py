@@ -41,7 +41,7 @@ class ImageDataset(Dataset):
                 for img in os.listdir("/".join([data_dir, dir]))]
 
     def get_len(self):
-        return self.image_labels
+        return len(set(self.image_labels['label']))
 
     
 

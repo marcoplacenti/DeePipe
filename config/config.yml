@@ -1,0 +1,14 @@
+project:
+  name: ImageClassification
+  experiment: exp-1
+  task: classification
+
+data:
+  location: "./data/image-classification/"
+  img-res: [28,28]
+  greyscale: false
+
+training:
+  epochs: 2
+  batch_size: 16
+  learning_rate: 0.001
