@@ -4,15 +4,15 @@ project:
   task: classification
 
 data:
-  location: "./data/image-classification/"
-  img-res: [48,48]
+  location: "./data/MNISTMini/"
+  img-res: [28,28]
   greyscale: true
 
 training:
-  epochs: 20
-  batch_size: 32
-  learning_rate: 0.005
+  epochs: 5
+  batch_size: 64
+  learning_rate: 0.01
 
 validation:
   test_size: 0.3
-  folds: null
+  folds: 2
