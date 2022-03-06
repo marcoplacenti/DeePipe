@@ -9,10 +9,10 @@ data:
   greyscale: true
 
 training:
-  epochs: 5
-  batch_size: 64
+  epochs: 1
+  batch_size: 128
   learning_rate: 0.01
 
 validation:
-  test_size: 0.3
-  folds: 2
+  test_size: 0.2
+  folds: null

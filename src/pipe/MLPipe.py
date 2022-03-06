@@ -36,28 +36,26 @@ class MLPipe():
         testloader = DataLoader(testset, 
                                 batch_size=self.TRAINING_HP['batch_size'])
 
-        return trainloader, testloader
+        return trainset, testset, trainloader, testloader
 
     def k_fold_split(self):
         kfold = KFold(n_splits=self.VALIDATION['folds'], shuffle=True)
-        trainloader, testloader = self.hold_out_split()
-        trainloader = ConcatDataset([trainloader])
+        trainset, _, _, testloader = self.hold_out_split()
         trainloader_list, valloader_list = [], []
-        for fold, (train_ids, test_ids) in enumerate(kfold.split(trainloader)):
+        for (train_ids, test_ids) in kfold.split(trainset):
             train_subsampler = torch.utils.data.SubsetRandomSampler(train_ids)
             val_subsampler = torch.utils.data.SubsetRandomSampler(test_ids)
 
-            
             trainloader_list.append(torch.utils.data.DataLoader(
-                            trainloader, 
+                            trainset, 
                             batch_size=self.TRAINING_HP['batch_size'],
                             sampler=train_subsampler))
 
             valloader_list.append(torch.utils.data.DataLoader(
-                            trainloader,
+                            trainset,
                             batch_size=self.TRAINING_HP['batch_size'],
                             sampler=val_subsampler))
-
+    
         return trainloader_list, valloader_list, testloader
 
     def preproc_data(self):
@@ -67,13 +65,22 @@ class MLPipe():
 
         self.dataset = ImageDataset(
                         data_dir=self.DATA['location'],
-                        transform=transform)
+                        transform=transform)   
 
-        if self.VALIDATION['folds']:
-            self.trainloader, self.valloader, self.testloader = self.k_fold_split()
-        else:
-            self.trainloader, self.testloader = self.hold_out_split()
-            
+    def epoch_loop(self, dataloader, optimizer):
+        for epoch in range(self.TRAINING_HP['epochs']):
+            for batch_idx, (images, labels) in enumerate(dataloader):
+                images, labels = images.to(self.device), labels.to(self.device)
+                optimizer.zero_grad()
+                outputs = self.net(images)
+                loss = self.loss_function(outputs, labels)
+                loss.backward()
+                optimizer.step()
+                if (batch_idx+1) % 20 == 0:
+                    print(f"Epoch [{epoch+1}/{self.TRAINING_HP['epochs']}], " +
+                        f"Step [{batch_idx+1}/{len(dataloader)}], " +
+                        f"Training Loss: {round(loss.item(),3)}")
+
 
     def train(self):
         if not self.DATA['greyscale']:
@@ -81,34 +88,59 @@ class MLPipe():
         else:
             in_channels = 1
 
-        self.net = Net(in_channels=in_channels, num_classes=self.dataset.get_num_classes()).to(self.device)
-
-        loss_function = nn.CrossEntropyLoss()
-        optimizer = torch.optim.Adam(self.net.parameters(), lr=self.TRAINING_HP['learning_rate'])
+        self.loss_function = nn.CrossEntropyLoss()
 
         if self.VALIDATION['folds']:
-            pass # TODO: implement cross validation training loop
-        else:
-            for epoch in range(self.TRAINING_HP['epochs']):
-                for i, (images,labels) in enumerate(self.trainloader):
-                    optimizer.zero_grad()
-                    outputs = self.net(images)
-                    loss = loss_function(outputs, labels)
-                    loss.backward()
-                    optimizer.step()
-                    if (i+1) % 100 == 0:
-                        print(f"Epoch [{epoch+1}/{self.TRAINING_HP['epochs']}], " +
-                            f"Step [{i+1}/{len(self.trainloader)}], Loss: {loss.item()}")
+            results = {}
+            self.trainloader, self.valloader, self.testloader = self.k_fold_split()
+            for (fold_idx, fold) in enumerate(self.trainloader):
+                self.net = Net(in_channels=in_channels, 
+                    num_classes=self.dataset.get_num_classes()).to(self.device)
+                optimizer = torch.optim.Adam(self.net.parameters(), 
+                                    lr=self.TRAINING_HP['learning_rate'])
+                self.epoch_loop(dataloader=fold, optimizer=optimizer)
 
+                with torch.no_grad():
+                    correct, total = 0, 0
+                    for images, labels in self.valloader[fold_idx]:
+                        images, labels = images.to(self.device), labels.to(self.device)
+                        output = self.net(images)
+                        _, predicted = torch.max(output,1)
+                        correct += (predicted == labels).sum()
+                        total += labels.size(0)
+
+                fold_acc = round((100*correct/total).item(), 3)
+                print(f'Accuracy for fold {fold_idx+1}: {fold_acc}%')
+                print('--------------------------------')
+                results[fold_idx] = fold_acc
+                    
+            print(f'K-FOLD CROSS VALIDATION RESULTS FOR {len(self.trainloader)} FOLDS')
+            print('--------------------------------')
+            sum = 0.0
+            for key, value in results.items():
+                print(f'Fold {key}: {value} %')
+                sum += value
+            print(f'Average: {sum/len(results.items())} %')
+        else:
+            _, _, self.trainloader, self.testloader = self.hold_out_split()
+            self.net = Net(in_channels=in_channels, 
+                    num_classes=self.dataset.get_num_classes()).to(self.device)
+            optimizer = torch.optim.Adam(self.net.parameters(), 
+                                lr=self.TRAINING_HP['learning_rate'])
+            self.epoch_loop(dataloader=self.trainloader, optimizer=optimizer)
+            
 
     def eval(self):
-        correct = 0
-        total = 0
-        for images, labels in self.testloader:
-            
-            output = self.net(images)
-            _, predicted = torch.max(output,1)
-            correct += (predicted == labels).sum()
-            total += labels.size(0)
+        if len(self.testloader) > 0:
+            with torch.no_grad():
+                correct, total = 0, 0
+                for images, labels in self.testloader:
+                    images, labels = images.to(self.device), labels.to(self.device)
+                    output = self.net(images)
+                    _, predicted = torch.max(output,1)
+                    correct += (predicted == labels).sum()
+                    total += labels.size(0)
 
-        print('Accuracy of the model: %.3f %%' %((100*correct)/(total+1)))
+            print('Accuracy of the model on test set: %.3f %%' %((100*correct/total).item()))
+        else:
+            print('Test set is empty. Step skipped.')
