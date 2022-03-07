@@ -1,1 +1,9 @@
 -e .
+torch
+torchvision
+numpy
+pandas
+opencv-python
+argparse
+pyyaml
+scikit-learn

@@ -1,0 +1,22 @@
+project:
+  name: ImageClassification
+  experiment: exp-1
+  task: classification
+
+data:
+  location: "./data/MNISTMini/"
+  img-res: [28,28]
+  greyscale: true
+
+training:
+  epochs: 1
+  batch_size: 128
+
+optimizer:
+  learning_rate: 0.01
+  step_size: 20
+  gamma: 0.1
+
+validation:
+  test_size: 0.2
+  folds: null
