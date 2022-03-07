@@ -11,7 +11,11 @@ data:
 training:
   epochs: 1
   batch_size: 128
+
+optimizer:
   learning_rate: 0.01
+  step_size: 20
+  gamma: 0.1
 
 validation:
   test_size: 0.2

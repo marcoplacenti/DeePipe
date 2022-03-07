@@ -1,7 +1,9 @@
 import torch
 import torch.nn as nn
 
-from torch.utils.data import DataLoader, ConcatDataset
+from torch.optim.lr_scheduler import StepLR
+
+from torch.utils.data import DataLoader
 from torchvision import transforms
 
 from sklearn.model_selection import KFold
@@ -14,6 +16,7 @@ class MLPipe():
     def __init__(self, config_dict=None):
         self.DATA = config_dict['data']
         self.TRAINING_HP = config_dict['training']
+        self.OPTIMIZER = config_dict['optimizer']
         #self.WANDB_KEY = config_dict['wandb']
         self.PROJECT = config_dict['project']
         self.VALIDATION = config_dict['validation']
@@ -67,7 +70,7 @@ class MLPipe():
                         data_dir=self.DATA['location'],
                         transform=transform)   
 
-    def epoch_loop(self, dataloader, optimizer):
+    def epoch_loop(self, dataloader, optimizer, scheduler=None):
         for epoch in range(self.TRAINING_HP['epochs']):
             for batch_idx, (images, labels) in enumerate(dataloader):
                 images, labels = images.to(self.device), labels.to(self.device)
@@ -80,6 +83,8 @@ class MLPipe():
                     print(f"Epoch [{epoch+1}/{self.TRAINING_HP['epochs']}], " +
                         f"Step [{batch_idx+1}/{len(dataloader)}], " +
                         f"Training Loss: {round(loss.item(),3)}")
+            if scheduler:
+                    scheduler.step()
 
 
     def train(self):
@@ -96,9 +101,14 @@ class MLPipe():
             for (fold_idx, fold) in enumerate(self.trainloader):
                 self.net = Net(in_channels=in_channels, 
                     num_classes=self.dataset.get_num_classes()).to(self.device)
+
                 optimizer = torch.optim.Adam(self.net.parameters(), 
-                                    lr=self.TRAINING_HP['learning_rate'])
-                self.epoch_loop(dataloader=fold, optimizer=optimizer)
+                                    lr=self.OPTIMIZER['learning_rate'])
+                scheduler = None
+                if self.OPTIMIZER['step_size'] and self.OPTIMIZER['gamma']:
+                    scheduler = StepLR(optimizer, step_size=self.OPTIMIZER['step_size'], gamma=self.OPTIMIZER['gamma'])
+
+                self.epoch_loop(dataloader=fold, optimizer=optimizer, scheduler=scheduler)
 
                 with torch.no_grad():
                     correct, total = 0, 0
@@ -126,8 +136,9 @@ class MLPipe():
             self.net = Net(in_channels=in_channels, 
                     num_classes=self.dataset.get_num_classes()).to(self.device)
             optimizer = torch.optim.Adam(self.net.parameters(), 
-                                lr=self.TRAINING_HP['learning_rate'])
-            self.epoch_loop(dataloader=self.trainloader, optimizer=optimizer)
+                                lr=self.OPTIMIZER['learning_rate'])
+            scheduler = StepLR(optimizer, step_size=self.OPTIMIZER['step_size'], gamma=self.OPTIMIZER['gamma'])
+            self.epoch_loop(dataloader=self.trainloader, optimizer=optimizer, scheduler=scheduler)
             
 
     def eval(self):

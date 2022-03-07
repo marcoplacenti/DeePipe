@@ -10,6 +10,7 @@ pyvenv.cfg
 # Distribution / packaging
 .Python
 bin/
+scripts/
 build/
 develop-eggs/
 dist/
