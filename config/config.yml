@@ -10,13 +10,17 @@ data:
 
 training:
   epochs: 1
-  batch_size: 128
+  batch_size: 128 # either scalar or list of scalars
 
 optimizer:
-  learning_rate: 0.01
-  step_size: 20
-  gamma: 0.1
+  name: adam # case insensitive - eiter string or list of str
+  learning_rate: 0.01 # either scalar or list of scalars
+  step_size: 20 # either scalar or list of scalars
+  gamma: 0.1 # either scalar or list of scalars
 
 validation:
   test_size: 0.2
   folds: null
+
+wandb:
+  key: 24b2e4eab14cdb91e7d3c8177f62af82c5911723 # ${{ secrets.WANDB_KEY }}

@@ -20,7 +20,6 @@ class Net(nn.Module):
 
         self.linear = nn.Linear(7200, self.num_classes)
         
-
     def forward(self, x):
         x = self.conv1(x)
         x = self.relu(x)

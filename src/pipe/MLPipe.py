@@ -17,14 +17,11 @@ class MLPipe():
         self.DATA = config_dict['data']
         self.TRAINING_HP = config_dict['training']
         self.OPTIMIZER = config_dict['optimizer']
-        #self.WANDB_KEY = config_dict['wandb']
+        self.WANDB_KEY = config_dict['wandb']
         self.PROJECT = config_dict['project']
         self.VALIDATION = config_dict['validation']
 
-        if torch.cuda.is_available():
-            self.device = torch.device("cuda")
-        else:
-            self.device = torch.device("cpu")
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     def hold_out_split(self):
         test_size = int(self.VALIDATION['test_size'] * len(self.dataset))
