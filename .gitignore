@@ -134,3 +134,8 @@ dmypy.json
 
 # data folder
 #data/
+
+
+wandb/
+tune_hp/
+lightning_logs/

@@ -2,6 +2,7 @@ import os
 import pandas as pd
 import numpy as np
 
+from PIL import Image
 import cv2
 
 import torch
@@ -11,12 +12,14 @@ from torchvision import transforms
 
 
 class ImageDataset(Dataset):
-    def __init__(self, data_dir, transform=None, target_transform=None):
-        self.img_dir = data_dir
-        self.image_labels = pd.DataFrame(self.make_annotations(self.img_dir),
+    def __init__(self, data_dir, channels, transform=None, target_transform=None):
+        self.img_dir = os.path.realpath(os.path.join(os.getcwd(), data_dir))
+        self.image_labels = pd.DataFrame(self.make_annotations(),
                                 columns=["img_path", "label"])
         self.transform = transform
         self.target_transform = target_transform
+
+        self.color = (cv2.IMREAD_GRAYSCALE if channels == 1 else cv2.IMREAD_COLOR)
         
 
     def __len__(self):
@@ -24,9 +27,11 @@ class ImageDataset(Dataset):
 
     def __getitem__(self, idx):
         img_path = os.path.join(self.img_dir, self.image_labels.iloc[idx, 0])
-        rgb_image = cv2.imread(img_path, cv2.IMREAD_COLOR)
-        rgb_image = np.transpose(rgb_image, axes=(2, 0, 1))
-        image = torch.from_numpy(rgb_image)/255
+        image = cv2.imread(img_path, self.color)
+        if len(image.shape) == 2:
+            image = np.reshape(image, (image.shape[0], image.shape[1], 1))
+        image = np.transpose(image, axes=(2, 0, 1))
+        image = torch.from_numpy(image)/255
         label = self.image_labels.iloc[idx, 1]
         if self.transform:
             image = self.transform(image)
@@ -34,10 +39,10 @@ class ImageDataset(Dataset):
             label = self.target_transform(label)
         return image, label
 
-    def make_annotations(self, data_dir):
+    def make_annotations(self):
         return [["/".join([dir, img]), idx] \
-            for idx, dir in enumerate(os.listdir(data_dir)) \
-                for img in os.listdir("/".join([data_dir, dir]))]
+            for idx, dir in enumerate(os.listdir(self.img_dir)) \
+                for img in os.listdir("/".join([self.img_dir, dir]))]
 
     def get_num_classes(self):
         return len(set(self.image_labels['label']))

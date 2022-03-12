@@ -1,26 +1,25 @@
 project:
   name: ImageClassification
-  experiment: exp-1
   task: classification
 
 data:
-  location: "./data/MNISTMini/"
+  location: data/MNISTMini/
   img-res: [28,28]
-  greyscale: true
+  greyscale: false
 
 training:
-  epochs: 1
-  batch_size: 128 # either scalar or list of scalars
+  max_epochs: 1
+  batch_size: [64, 128] # either scalar or list of scalars
 
 optimizer:
-  name: adam # case insensitive - eiter string or list of str
-  learning_rate: 0.01 # either scalar or list of scalars
-  step_size: 20 # either scalar or list of scalars
+  learning_rate: [0.0001, 0.01] # either scalar or list of scalars
+  step_size: 30 # either scalar or list of scalars
   gamma: 0.1 # either scalar or list of scalars
+  number_trials: 3
 
 validation:
   test_size: 0.2
-  folds: null
+  folds: 2
 
 wandb:
   key: 24b2e4eab14cdb91e7d3c8177f62af82c5911723 # ${{ secrets.WANDB_KEY }}

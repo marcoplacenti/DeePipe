@@ -2,13 +2,22 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-class Net(nn.Module):
-    def __init__(self, in_channels, num_classes):
+from torch.utils.data import DataLoader
+from torchvision import transforms
+
+import pytorch_lightning as pl
+
+class Net(pl.LightningModule):
+    def __init__(self, dataset, in_channels, hp, loss_func):
         super(Net, self).__init__()
 
-        self.num_classes = num_classes
+        self.lr = hp['lr']
+        self.dataset = dataset
+        self.num_classes = self.dataset.get_num_classes()
+        self.loss_func = loss_func
+
         self.channels = [64]
-        self.conv1 = nn.Conv2d(in_channels=3, out_channels=self.channels[0], 
+        self.conv1 = nn.Conv2d(in_channels=in_channels, out_channels=self.channels[0], 
             kernel_size=4, stride=1, padding=2)
         self.conv2 = nn.Conv2d(in_channels=self.channels[0], out_channels=32, 
             kernel_size=4, stride=1, padding=2)
@@ -31,3 +40,37 @@ class Net(nn.Module):
         x = self.linear(x)
         x = F.log_softmax(x, dim=1)
         return x
+
+    def training_step(self, batch, batch_idx):
+        images, labels = batch
+        outputs = self(images)
+        loss = self.loss_func(outputs, labels)
+
+        return {'loss': loss}
+
+    def validation_step(self, batch, batch_idx):
+        images, labels = batch
+        output = self(images)
+        loss = self.loss_func(output, labels)
+
+        return {'val_loss': loss}
+
+    def test_step(self, batch, batch_idx):
+        images, labels = batch
+        output = self(images)
+        _, predicted = torch.max(output,1)
+        correct = (predicted == labels).sum()
+        total = labels.size(0)
+
+        return {'test_accuracy': round((100*correct/total).item(), 3)}
+
+    def validation_epoch_end(self, outputs):
+        avg_loss = torch.stack([x['val_loss'] for x in outputs]).mean()
+        self.log("ptl/val_loss", avg_loss)
+        #self.log("ptl/val_accuracy", avg_acc)
+        #return {'val_loss': avg_loss}
+
+    def configure_optimizers(self):
+        return torch.optim.Adam(self.parameters(), 
+                            lr=self.lr)
+
