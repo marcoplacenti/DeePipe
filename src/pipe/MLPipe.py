@@ -75,7 +75,6 @@ class MLPipe():
         else:
             hp['gamma'] = self.OPTIMIZER['gamma']
         
-        print(hp)
         return hp
 
 
@@ -97,7 +96,7 @@ class MLPipe():
         return trainset, testset, trainloader, testloader
 
     def k_fold_split(self, batch_size):
-        kfold = KFold(n_splits=self.VALIDATION['folds'], shuffle=True)
+        kfold = KFold(n_splits=self.VALIDATION['folds'], shuffle=False)
         trainset, _, _, testloader = self.hold_out_split(batch_size=batch_size)
         trainloader_list, valloader_list = [], []
         for (train_ids, test_ids) in kfold.split(trainset):
@@ -136,7 +135,7 @@ class MLPipe():
 
         metrics = {"loss": "ptl/val_loss"}
         callbacks = [TuneReportCallback(metrics, on="validation_end")]
-        trainer = Trainer(fast_dev_run=False, max_epochs=hp['max_epochs'], callbacks=callbacks)
+        trainer = Trainer(fast_dev_run=False, max_epochs=hp['max_epochs'], callbacks=callbacks, strategy="ddp")
 
         if self.VALIDATION['folds']:
             trainloader, valloader, testloader = self.k_fold_split(batch_size=hp['batch_size'])
@@ -151,6 +150,26 @@ class MLPipe():
             
             trainer.fit(net, trainloader)
 
+    def train_opt(self, hp):
+
+        loss_func = nn.CrossEntropyLoss()
+
+        #metrics = {"loss": "ptl/val_loss"}
+        #callbacks = [TuneReportCallback(metrics, on="validation_end")]
+        self.trainer = Trainer(fast_dev_run=False, max_epochs=hp['max_epochs'], strategy="ddp")#, callbacks=callbacks)
+
+        if self.VALIDATION['folds']:
+            self.trainloader, self.valloader, self.testloader = self.k_fold_split(batch_size=hp['batch_size'])
+            for (fold_idx, fold) in enumerate(self.trainloader):
+                self.net = Net(dataset=self.dataset, in_channels=self.channels, hp=hp, loss_func=loss_func)
+
+                self.trainer.fit(self.net, self.trainloader[fold_idx], self.valloader[fold_idx])
+                    
+        else:
+            _, _, self.trainloader, self.testloader = self.hold_out_split(batch_size=hp['batch_size'])
+            self.net = Net(dataset=self.dataset, in_channels=self.channels, hp=hp, loss_func=loss_func)
+            
+            self.trainer.fit(self.net, self.trainloader)
 
     def train(self):
         if self.is_hp:
@@ -181,11 +200,11 @@ class MLPipe():
                 verbose=1)
 
             final_config = analysis.best_config
-            print(final_config)
-            #self.train_trial(final_config)
+            
+            self.train_opt(final_config)
 
         else:
-            pass #self.train_trial(self.hp)
+            self.train_opt(self.hp)
 
     def eval(self):
         if len(self.testloader) > 0:

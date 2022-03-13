@@ -55,6 +55,10 @@ class Net(pl.LightningModule):
 
         return {'val_loss': loss}
 
+    def validation_epoch_end(self, outputs):
+        avg_loss = torch.stack([x['val_loss'] for x in outputs]).mean()
+        self.log("ptl/val_loss", avg_loss)
+
     def test_step(self, batch, batch_idx):
         images, labels = batch
         output = self(images)
@@ -62,13 +66,11 @@ class Net(pl.LightningModule):
         correct = (predicted == labels).sum()
         total = labels.size(0)
 
-        return {'test_accuracy': round((100*correct/total).item(), 3)}
+        return {'test_acc': correct/total}
 
-    def validation_epoch_end(self, outputs):
-        avg_loss = torch.stack([x['val_loss'] for x in outputs]).mean()
-        self.log("ptl/val_loss", avg_loss)
-        #self.log("ptl/val_accuracy", avg_acc)
-        #return {'val_loss': avg_loss}
+    def test_epoch_end(self, outputs):
+        avg_acc = torch.stack([x['test_acc'] for x in outputs]).mean()
+        self.log("ptl/test_acc", avg_acc)
 
     def configure_optimizers(self):
         return torch.optim.Adam(self.parameters(), 
