@@ -22,23 +22,26 @@ class Net(pl.LightningModule):
         self.conv2 = nn.Conv2d(in_channels=self.channels[0], out_channels=32, 
             kernel_size=4, stride=1, padding=2)
 
+        self.max_pool2d = nn.MaxPool2d(kernel_size=2, stride=2)
+
         self.dropout1 = nn.Dropout2d(0.25)
-        self.dropout2 = nn.Dropout2d(0.5)
 
         self.relu = nn.ReLU()
 
+        self.flatten = nn.Flatten(start_dim=1)
         self.linear = nn.Linear(7200, self.num_classes)
+        self.log_softmax = nn.LogSoftmax(dim=1)
         
     def forward(self, x):
         x = self.conv1(x)
         x = self.relu(x)
         x = self.conv2(x)
         x = self.relu(x)
-        x = F.max_pool2d(x, kernel_size=2, stride=2)
+        x = self.max_pool2d(x)
         x = self.dropout1(x)
-        x = torch.flatten(x, 1)
+        x = self.flatten(x)
         x = self.linear(x)
-        x = F.log_softmax(x, dim=1)
+        x = self.log_softmax(x)
         return x
 
     def training_step(self, batch, batch_idx):
