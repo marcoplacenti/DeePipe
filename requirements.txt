@@ -4,6 +4,12 @@ torchvision
 numpy
 pandas
 opencv-python
+pillow
 argparse
 pyyaml
 scikit-learn
+wandb
+uuid
+pytorch-lightning
+pytorch-lightning-bolts
+ray[tune]
