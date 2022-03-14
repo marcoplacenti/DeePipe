@@ -9,12 +9,12 @@ data:
 
 training:
   max_epochs: 1
-  batch_size: [64, 128] # either scalar or list of scalars
+  batch_size: [64, 128]
 
 optimizer:
-  learning_rate: [0.0001, 0.01] # either scalar or list of scalars
-  step_size: 30 # either scalar or list of scalars
-  gamma: 0.1 # either scalar or list of scalars
+  learning_rate: [0.0001, 0.01]
+  step_size: 30
+  gamma: 0.1
   number_trials: 3
 
 validation:

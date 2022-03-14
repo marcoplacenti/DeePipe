@@ -26,19 +26,27 @@ TUNE_ORIG_WORKING_DIR = os.getcwd()
 
 
 class MLPipe():
+
+
     def __init__(self, config_dict=None):
         
+        self.__parse_config_dict__(config_dict)
+
+        self.__set_hp_params__()
+
+        #wandb.login(key=self.WANDB_KEY['key'])
+        #wandb.init(project=self.PROJECT['name'], name=self.PROJECT['experiment'])
+
+
+    def __parse_config_dict__(self, config_dict):
+        # TODO: do actual parsing and validate argument, else throw error
+
         self.DATA = config_dict['data']
         self.TRAINING_HP = config_dict['training']
         self.OPTIMIZER = config_dict['optimizer']
         self.WANDB_KEY = config_dict['wandb']
         self.PROJECT = config_dict['project']
         self.VALIDATION = config_dict['validation']
-
-        self.hp = self.__get_hp_params__()
-
-        #wandb.login(key=self.WANDB_KEY['key'])
-        #wandb.init(project=self.PROJECT['name'], name=self.PROJECT['experiment'])
 
         try:
             self.PROJECT['experiment']
@@ -47,35 +55,34 @@ class MLPipe():
 
         self.channels = (1 if self.DATA['greyscale'] else 3)
 
-    def __get_hp_params__(self):
+
+    def __set_hp_params__(self):
         self.is_hp = False
-        hp = {'max_epochs': self.TRAINING_HP['max_epochs']}
+        self.hp = {'max_epochs': self.TRAINING_HP['max_epochs']}
 
         if isinstance(self.TRAINING_HP['batch_size'], list):
-            hp['batch_size'] = tune.choice(self.TRAINING_HP['batch_size'])
+            self.hp['batch_size'] = tune.choice(self.TRAINING_HP['batch_size'])
             self.is_hp = True
         else:
-            hp['batch_size'] = self.TRAINING_HP['batch_size']
+            self.hp['batch_size'] = self.TRAINING_HP['batch_size']
 
         if isinstance(self.OPTIMIZER['learning_rate'], list):
-            hp['lr'] = tune.loguniform(self.OPTIMIZER['learning_rate'][0], self.OPTIMIZER['learning_rate'][1])
+            self.hp['lr'] = tune.loguniform(self.OPTIMIZER['learning_rate'][0], self.OPTIMIZER['learning_rate'][1])
             self.is_hp = True
         else:
-            hp['lr'] = self.OPTIMIZER['learning_rate']
+            self.hp['lr'] = self.OPTIMIZER['learning_rate']
 
         if isinstance(self.OPTIMIZER['step_size'], list):
-            hp['step_size'] = tune.choice(self.OPTIMIZER['step_size'])
+            self.hp['step_size'] = tune.choice(self.OPTIMIZER['step_size'])
             self.is_hp = True
         else:
-            hp['step_size'] = self.OPTIMIZER['step_size']
+           self.hp['step_size'] = self.OPTIMIZER['step_size']
 
         if isinstance(self.OPTIMIZER['gamma'], list):
-            hp['gamma'] = tune.loguniform(self.OPTIMIZER['gamma'][0], self.OPTIMIZER['gamma'][1])
+            self.hp['gamma'] = tune.loguniform(self.OPTIMIZER['gamma'][0], self.OPTIMIZER['gamma'][1])
             self.is_hp = True
         else:
-            hp['gamma'] = self.OPTIMIZER['gamma']
-        
-        return hp
+            self.hp['gamma'] = self.OPTIMIZER['gamma']
 
 
     def hold_out_split(self, batch_size):
@@ -94,6 +101,7 @@ class MLPipe():
                                 num_workers=4)
 
         return trainset, testset, trainloader, testloader
+
 
     def k_fold_split(self, batch_size):
         kfold = KFold(n_splits=self.VALIDATION['folds'], shuffle=False)
@@ -117,6 +125,7 @@ class MLPipe():
     
         return trainloader_list, valloader_list, testloader
 
+
     def preproc_data(self):
         transform = transforms.Resize((
                         self.DATA['img-res'][0], 
@@ -126,6 +135,7 @@ class MLPipe():
                         data_dir=self.DATA['location'],
                         channels=self.channels,
                         transform=transform)
+
 
     def train_trial(self, hp):
 
@@ -150,6 +160,7 @@ class MLPipe():
             
             trainer.fit(net, trainloader)
 
+
     def train_opt(self, hp):
 
         loss_func = nn.CrossEntropyLoss()
@@ -170,6 +181,7 @@ class MLPipe():
             self.net = Net(dataset=self.dataset, in_channels=self.channels, hp=hp, loss_func=loss_func)
             
             self.trainer.fit(self.net, self.trainloader)
+
 
     def train(self):
         if self.is_hp:
@@ -205,6 +217,7 @@ class MLPipe():
 
         else:
             self.train_opt(self.hp)
+
 
     def eval(self):
         if len(self.testloader) > 0:
