@@ -49,6 +49,8 @@ class Net(pl.LightningModule):
         outputs = self(images)
         loss = self.loss_func(outputs, labels)
 
+        self.log("ptl/loss", loss)
+
         return {'loss': loss}
 
     def validation_step(self, batch, batch_idx):
