@@ -53,12 +53,18 @@ class Net(pl.LightningModule):
 
         return {'loss': loss}
 
+    def training_step_end(self, outputs):
+        self.log('ptl/train_loss_batch', outputs['loss'])
+
     def validation_step(self, batch, batch_idx):
         images, labels = batch
         output = self(images)
         loss = self.loss_func(output, labels)
 
         return {'val_loss': loss}
+
+    def validation_step_end(self, outputs):
+        self.log("ptl/val_loss_batch", outputs['val_loss'])
 
     def validation_epoch_end(self, outputs):
         avg_loss = torch.stack([x['val_loss'] for x in outputs]).mean()

@@ -8,6 +8,7 @@ from torchvision import transforms
 
 from pytorch_lightning import Trainer
 from pytorch_lightning.callbacks import ModelCheckpoint
+from pytorch_lightning.callbacks.early_stopping import EarlyStopping
 from pytorch_lightning.loggers import WandbLogger
 
 from ray.tune.integration.pytorch_lightning import TuneReportCallback
@@ -144,23 +145,31 @@ class MLPipe():
                         [train_size, test_size])
 
 
-    def train_trial(self, hp):
+    def train_trial(self, hp, checkpoint_dir=None):
 
         os.chdir(TUNE_ORIG_WORKING_DIR)
 
-        loss_func = nn.CrossEntropyLoss()
-
-        callbacks = [
-            TuneReportCallback({"val_loss": "ptl/val_loss"}, on="validation_end")
-            #TuneReportCallback({"loss": "ptl/loss"}, on="batch_end")
-        
-        ]
-
         wandb_logger = WandbLogger()
-
-        trainer = Trainer(fast_dev_run=False, max_epochs=hp['max_epochs'], logger=wandb_logger, callbacks=callbacks, strategy="ddp")
+        loss_func = nn.NLLLoss()
 
         if self.VALIDATION['folds']:
+
+            callbacks = [
+                TuneReportCallback({"loss": "ptl/val_loss"}, on="validation_end"),
+                EarlyStopping(monitor="ptl/loss")
+                #TuneReportCallback({"loss": "ptl/loss"}, on="batch_end")
+            
+            ]
+
+            trainer = Trainer(fast_dev_run=False, 
+                            max_epochs=hp['max_epochs'], 
+                            logger=wandb_logger, 
+                            callbacks=callbacks,
+                            log_every_n_steps=1,
+                            strategy="ddp", 
+                            enable_progress_bar=False)
+
+        
             trainloader, valloader, _ = self.k_fold_split(batch_size=hp['batch_size'])
             for (fold_idx, fold) in enumerate(trainloader):
                 net = Net(dataset=self.dataset, in_channels=self.channels, hp=hp, loss_func=loss_func)
@@ -168,6 +177,22 @@ class MLPipe():
                 trainer.fit(net, trainloader[fold_idx], valloader[fold_idx])
                     
         else:
+
+            callbacks = [
+                #TuneReportCallback({"val_loss": "ptl/val_loss"}, on="validation_end")
+                TuneReportCallback({"loss": "ptl/loss"}, on="fit_end"),
+                EarlyStopping(monitor="ptl/loss")
+            
+            ]
+
+            trainer = Trainer(fast_dev_run=False, 
+                            max_epochs=hp['max_epochs'], 
+                            logger=wandb_logger, 
+                            callbacks=callbacks,
+                            log_every_n_steps=1,
+                            strategy="ddp", 
+                            enable_progress_bar=False)
+
             trainloader, _ = self.hold_out_split(batch_size=hp['batch_size'])
             net = Net(dataset=self.dataset, in_channels=self.channels, hp=hp, loss_func=loss_func)
             
@@ -176,12 +201,20 @@ class MLPipe():
 
     def train_opt(self, hp):
 
-        loss_func = nn.CrossEntropyLoss()
+        wandb_logger = WandbLogger()
+        loss_func = nn.NLLLoss()
 
-        #metrics = {"acc": "ptl/test_acc"}
-        #callbacks = [TuneReportCallback(metrics, on="test_end")]
-        checkpoint_callback = ModelCheckpoint(dirpath="./models/", monitor='ptl/loss', save_top_k=3, save_last=True)
-        self.trainer = Trainer(fast_dev_run=False, max_epochs=hp['max_epochs'], strategy="ddp", callbacks=[checkpoint_callback])
+        callbacks = [
+            ModelCheckpoint(dirpath="./models/", monitor='ptl/loss', save_top_k=3, save_last=True),
+            EarlyStopping(monitor="ptl/val_loss")
+        ]
+        
+        self.trainer = Trainer(fast_dev_run=False, 
+                            max_epochs=hp['max_epochs'],
+                            logger=wandb_logger,
+                            callbacks=callbacks,
+                            log_every_n_steps=1,
+                            strategy="ddp")
     
         self.trainloader, self.testloader = self.hold_out_split(batch_size=hp['batch_size'])
         self.net = Net(dataset=self.dataset, in_channels=self.channels, hp=hp, loss_func=loss_func)
@@ -191,7 +224,7 @@ class MLPipe():
 
     def train(self):
         if self.is_hp:
-            trainable = tune.with_parameters(self.train_trial)
+            trainable = tune.with_parameters(self.train_trial, checkpoint_dir=None)
 
             scheduler = ASHAScheduler(
                 max_t=self.TRAINING_HP['max_epochs'],
@@ -209,7 +242,7 @@ class MLPipe():
                     "gpu": 0
                 },
                 local_dir=".",
-                metric="val_loss",
+                metric="loss",
                 mode="min",
                 config=self.hp,
                 callbacks=[WandbLoggerCallback(
