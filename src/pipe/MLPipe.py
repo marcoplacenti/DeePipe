@@ -149,7 +149,7 @@ class MLPipe():
 
         os.chdir(TUNE_ORIG_WORKING_DIR)
 
-        wandb_logger = WandbLogger()
+        wandb_logger = WandbLogger() # TODO: correct config
         loss_func = nn.NLLLoss()
 
         if self.VALIDATION['folds']:
@@ -201,7 +201,7 @@ class MLPipe():
 
     def train_opt(self, hp):
 
-        wandb_logger = WandbLogger()
+        wandb_logger = WandbLogger() # TODO: correct config
         loss_func = nn.NLLLoss()
 
         callbacks = [
