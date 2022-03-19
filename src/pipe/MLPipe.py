@@ -41,16 +41,13 @@ class MLPipe():
 
         self.__set_hp_params__()
 
-        #wandb.login(key=self.WANDB['key'])
-        #wandb.init(project=self.PROJECT['name'], name=self.PROJECT['experiment'])
-
 
     def __parse_config_dict__(self, config_dict):
-        # TODO: do actual parsing and validate argument, else throw error
 
         self.DATA = config_dict['data']
         self.TRAINING_HP = config_dict['training']
         self.OPTIMIZER = config_dict['optimizer']
+        self.TUNING = config_dict['tuning']
         self.WANDB = config_dict['wandb']
         self.PROJECT = config_dict['project']
         self.VALIDATION = config_dict['validation']
@@ -79,6 +76,7 @@ class MLPipe():
         else:
             self.hp['lr'] = self.OPTIMIZER['learning_rate']
 
+        """
         if isinstance(self.OPTIMIZER['step_size'], list):
             self.hp['step_size'] = tune.choice(self.OPTIMIZER['step_size'])
             self.is_hp = True
@@ -90,7 +88,7 @@ class MLPipe():
             self.is_hp = True
         else:
             self.hp['gamma'] = self.OPTIMIZER['gamma']
-
+        """
 
     def hold_out_split(self, batch_size):
         
@@ -144,6 +142,11 @@ class MLPipe():
         self.trainset, self.testset = torch.utils.data.random_split(self.dataset, 
                         [train_size, test_size])
 
+        torch.save(self.dataset, './data/raw/dataset.pt')
+        torch.save(self.trainset, './data/raw/trainset.pt')
+        torch.save(self.testset, './data/raw/testset.pt')
+
+        # TODO: create and upload artifacts both in S3 and wandb
 
     def train_trial(self, hp, checkpoint_dir=None):
 
@@ -245,7 +248,7 @@ class MLPipe():
                     group=self.PROJECT['experiment'],
                     api_key=self.WANDB['key'],
                     log_config=False)],
-                num_samples=self.OPTIMIZER['number_trials'],
+                num_samples=self.TUNING['number_trials'],
                 scheduler=scheduler,
                 name="tune_hp",
                 verbose=0)

@@ -7,6 +7,7 @@ opencv-python
 pillow
 argparse
 pyyaml
+yamale
 scikit-learn
 wandb
 uuid

@@ -2,11 +2,28 @@ from src.pipe.MLPipe import MLPipe
 
 import argparse
 import yaml
+import yamale
+
+def validate(config_file):
+    schema = yamale.make_schema('./config/schema.yml')
+    data = yamale.make_data(config_file)
+
+    try:
+        yamale.validate(schema, data)
+    except:
+        print("Provided yaml file not acceptable.")
+        exit(1)
+    
+    return
+
 
 def parse_config(args):
     config_file = args.config
+    validate(config_file)
+
     with open(config_file) as infile:
         config_dict = yaml.load(infile, Loader=yaml.SafeLoader)
+
     return config_dict
 
 
