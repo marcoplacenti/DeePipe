@@ -7,7 +7,13 @@ from torch.utils.data import DataLoader
 from torchvision import transforms
 
 from pytorch_lightning import Trainer
+from pytorch_lightning.callbacks import ModelCheckpoint
+from pytorch_lightning.callbacks.early_stopping import EarlyStopping
+from pytorch_lightning.loggers import WandbLogger
+
 from ray.tune.integration.pytorch_lightning import TuneReportCallback
+from ray.tune.logger import DEFAULT_LOGGERS
+from ray.tune.integration.wandb import WandbLoggerCallback
 from ray.tune.schedulers import ASHAScheduler
 from ray.tune import CLIReporter
 from ray import tune
@@ -17,6 +23,7 @@ from sklearn.model_selection import KFold
 import wandb
 
 import uuid
+import datetime
 import os
 
 from src.data.make_dataset import ImageDataset
@@ -34,7 +41,7 @@ class MLPipe():
 
         self.__set_hp_params__()
 
-        #wandb.login(key=self.WANDB_KEY['key'])
+        #wandb.login(key=self.WANDB['key'])
         #wandb.init(project=self.PROJECT['name'], name=self.PROJECT['experiment'])
 
 
@@ -44,14 +51,14 @@ class MLPipe():
         self.DATA = config_dict['data']
         self.TRAINING_HP = config_dict['training']
         self.OPTIMIZER = config_dict['optimizer']
-        self.WANDB_KEY = config_dict['wandb']
+        self.WANDB = config_dict['wandb']
         self.PROJECT = config_dict['project']
         self.VALIDATION = config_dict['validation']
 
         try:
             self.PROJECT['experiment']
         except KeyError:
-            self.PROJECT['experiment'] = uuid.uuid4().hex
+            self.PROJECT['experiment'] = str(datetime.datetime.now())+'-'+str(uuid.uuid4().hex)
 
         self.channels = (1 if self.DATA['greyscale'] else 3)
 
@@ -86,42 +93,38 @@ class MLPipe():
 
 
     def hold_out_split(self, batch_size):
-        test_size = int(self.VALIDATION['test_size'] * len(self.dataset))
-        train_size = len(self.dataset) - test_size
-        trainset, testset = torch.utils.data.random_split(self.dataset, 
-                        [train_size, test_size])
-
-        trainloader = DataLoader(trainset, 
+        
+        trainloader = DataLoader(self.trainset, 
                                 batch_size=batch_size, 
                                 shuffle=True,
-                                num_workers=4)
+                                num_workers=1)
         
-        testloader = DataLoader(testset, 
+        testloader = DataLoader(self.testset, 
                                 batch_size=batch_size,
-                                num_workers=4)
+                                num_workers=1)
 
-        return trainset, testset, trainloader, testloader
+        return trainloader, testloader
 
 
     def k_fold_split(self, batch_size):
-        kfold = KFold(n_splits=self.VALIDATION['folds'], shuffle=False)
-        trainset, _, _, testloader = self.hold_out_split(batch_size=batch_size)
+        kfold = KFold(n_splits=self.VALIDATION['folds'], shuffle=True)
+        _, testloader = self.hold_out_split(batch_size)
         trainloader_list, valloader_list = [], []
-        for (train_ids, test_ids) in kfold.split(trainset):
+        for (train_ids, test_ids) in kfold.split(self.trainset):
             train_subsampler = torch.utils.data.SubsetRandomSampler(train_ids)
             val_subsampler = torch.utils.data.SubsetRandomSampler(test_ids)
 
             trainloader_list.append(torch.utils.data.DataLoader(
-                            trainset, 
+                            self.trainset, 
                             batch_size=batch_size,
                             sampler=train_subsampler,
-                            num_workers=4))
+                            num_workers=1))
 
             valloader_list.append(torch.utils.data.DataLoader(
-                            trainset,
+                            self.trainset,
                             batch_size=batch_size,
                             sampler=val_subsampler,
-                            num_workers=4))
+                            num_workers=1))
     
         return trainloader_list, valloader_list, testloader
 
@@ -136,26 +139,55 @@ class MLPipe():
                         channels=self.channels,
                         transform=transform)
 
+        test_size = int(self.VALIDATION['test_size'] * len(self.dataset))
+        train_size = len(self.dataset) - test_size
+        self.trainset, self.testset = torch.utils.data.random_split(self.dataset, 
+                        [train_size, test_size])
 
-    def train_trial(self, hp):
+
+    def train_trial(self, hp, checkpoint_dir=None):
 
         os.chdir(TUNE_ORIG_WORKING_DIR)
 
-        loss_func = nn.CrossEntropyLoss()
-
-        metrics = {"loss": "ptl/val_loss"}
-        callbacks = [TuneReportCallback(metrics, on="validation_end")]
-        trainer = Trainer(fast_dev_run=False, max_epochs=hp['max_epochs'], callbacks=callbacks, strategy="ddp")
+        loss_func = nn.NLLLoss()
 
         if self.VALIDATION['folds']:
-            trainloader, valloader, testloader = self.k_fold_split(batch_size=hp['batch_size'])
+
+            callbacks = [
+                TuneReportCallback({"loss": "ptl/val_loss"}, on="validation_end"),
+                EarlyStopping(monitor="ptl/loss")
+            ]
+
+            trainer = Trainer(fast_dev_run=False, 
+                            max_epochs=hp['max_epochs'], 
+                            callbacks=callbacks,
+                            log_every_n_steps=1,
+                            strategy="ddp", 
+                            enable_progress_bar=False)
+        
+            trainloader, valloader, _ = self.k_fold_split(batch_size=hp['batch_size'])
             for (fold_idx, fold) in enumerate(trainloader):
                 net = Net(dataset=self.dataset, in_channels=self.channels, hp=hp, loss_func=loss_func)
 
                 trainer.fit(net, trainloader[fold_idx], valloader[fold_idx])
                     
         else:
-            _, _, trainloader, testloader = self.hold_out_split(batch_size=hp['batch_size'])
+
+            callbacks = [
+                TuneReportCallback({"loss": "ptl/loss"}, on="fit_end"),
+                EarlyStopping(monitor="ptl/loss")
+            
+            ]
+
+            trainer = Trainer(fast_dev_run=False, 
+                            max_epochs=hp['max_epochs'], 
+                            logger=wandb_logger, 
+                            callbacks=callbacks,
+                            log_every_n_steps=1,
+                            strategy="ddp", 
+                            enable_progress_bar=False)
+
+            trainloader, _ = self.hold_out_split(batch_size=hp['batch_size'])
             net = Net(dataset=self.dataset, in_channels=self.channels, hp=hp, loss_func=loss_func)
             
             trainer.fit(net, trainloader)
@@ -163,29 +195,31 @@ class MLPipe():
 
     def train_opt(self, hp):
 
-        loss_func = nn.CrossEntropyLoss()
+        wandb_logger = WandbLogger(project=self.PROJECT['name'], name=self.PROJECT['experiment'])
+        loss_func = nn.NLLLoss()
 
-        #metrics = {"loss": "ptl/val_loss"}
-        #callbacks = [TuneReportCallback(metrics, on="validation_end")]
-        self.trainer = Trainer(fast_dev_run=False, max_epochs=hp['max_epochs'], strategy="ddp")#, callbacks=callbacks)
-
-        if self.VALIDATION['folds']:
-            self.trainloader, self.valloader, self.testloader = self.k_fold_split(batch_size=hp['batch_size'])
-            for (fold_idx, fold) in enumerate(self.trainloader):
-                self.net = Net(dataset=self.dataset, in_channels=self.channels, hp=hp, loss_func=loss_func)
-
-                self.trainer.fit(self.net, self.trainloader[fold_idx], self.valloader[fold_idx])
-                    
-        else:
-            _, _, self.trainloader, self.testloader = self.hold_out_split(batch_size=hp['batch_size'])
-            self.net = Net(dataset=self.dataset, in_channels=self.channels, hp=hp, loss_func=loss_func)
-            
-            self.trainer.fit(self.net, self.trainloader)
+        callbacks = [
+            ModelCheckpoint(dirpath="./models/", monitor='ptl/loss', save_top_k=3, save_last=True),
+            EarlyStopping(monitor="ptl/loss")
+        ]
+        
+        self.trainer = Trainer(fast_dev_run=False, 
+                            max_epochs=hp['max_epochs'],
+                            logger=wandb_logger,
+                            callbacks=callbacks,
+                            log_every_n_steps=1,
+                            strategy="ddp")
+    
+        self.trainloader, self.testloader = self.hold_out_split(batch_size=hp['batch_size'])
+        self.net = Net(dataset=self.dataset, in_channels=self.channels, hp=hp, loss_func=loss_func)
+        
+        self.trainer.fit(self.net, self.trainloader)
 
 
     def train(self):
         if self.is_hp:
-            trainable = tune.with_parameters(self.train_trial)
+
+            trainable = tune.with_parameters(self.train_trial, checkpoint_dir=None)
 
             scheduler = ASHAScheduler(
                 max_t=self.TRAINING_HP['max_epochs'],
@@ -206,10 +240,15 @@ class MLPipe():
                 metric="loss",
                 mode="min",
                 config=self.hp,
+                callbacks=[WandbLoggerCallback(
+                    project=self.PROJECT['name']+'-HP',
+                    group=self.PROJECT['experiment'],
+                    api_key=self.WANDB['key'],
+                    log_config=False)],
                 num_samples=self.OPTIMIZER['number_trials'],
                 scheduler=scheduler,
                 name="tune_hp",
-                verbose=1)
+                verbose=0)
 
             final_config = analysis.best_config
             
