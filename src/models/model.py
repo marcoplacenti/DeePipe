@@ -54,14 +54,20 @@ class Net(pl.LightningModule):
         return {'loss': loss}
 
     def training_step_end(self, outputs):
-        self.log('ptl/train_loss_batch', outputs['loss'])
+        pass#self.log('ptl/train_loss_batch', outputs['loss'])
 
     def validation_step(self, batch, batch_idx):
         images, labels = batch
         output = self(images)
         loss = self.loss_func(output, labels)
+        _, predicted = torch.max(output,1)
+        correct = (predicted == labels).sum()
+        total = labels.size(0)
 
-        return {'val_loss': loss}
+        self.log("ptl/val_loss", loss)
+        self.log("ptl/val_acc", correct/total)
+
+        return {'val_loss': loss, "val_acc": correct/total}
 
     def validation_step_end(self, outputs):
         self.log("ptl/val_loss_batch", outputs['val_loss'])
@@ -76,6 +82,8 @@ class Net(pl.LightningModule):
         _, predicted = torch.max(output,1)
         correct = (predicted == labels).sum()
         total = labels.size(0)
+
+        self.log("ptl/test_acc", correct/total)
 
         return {'test_acc': correct/total}
 

@@ -97,11 +97,11 @@ class MLPipe():
         trainloader = DataLoader(self.trainset, 
                                 batch_size=batch_size, 
                                 shuffle=True,
-                                num_workers=4)
+                                num_workers=1)
         
         testloader = DataLoader(self.testset, 
                                 batch_size=batch_size,
-                                num_workers=4)
+                                num_workers=1)
 
         return trainloader, testloader
 
@@ -118,13 +118,13 @@ class MLPipe():
                             self.trainset, 
                             batch_size=batch_size,
                             sampler=train_subsampler,
-                            num_workers=4))
+                            num_workers=1))
 
             valloader_list.append(torch.utils.data.DataLoader(
                             self.trainset,
                             batch_size=batch_size,
                             sampler=val_subsampler,
-                            num_workers=4))
+                            num_workers=1))
     
         return trainloader_list, valloader_list, testloader
 
@@ -149,7 +149,6 @@ class MLPipe():
 
         os.chdir(TUNE_ORIG_WORKING_DIR)
 
-        wandb_logger = WandbLogger() # TODO: correct config
         loss_func = nn.NLLLoss()
 
         if self.VALIDATION['folds']:
@@ -157,18 +156,14 @@ class MLPipe():
             callbacks = [
                 TuneReportCallback({"loss": "ptl/val_loss"}, on="validation_end"),
                 EarlyStopping(monitor="ptl/loss")
-                #TuneReportCallback({"loss": "ptl/loss"}, on="batch_end")
-            
             ]
 
             trainer = Trainer(fast_dev_run=False, 
                             max_epochs=hp['max_epochs'], 
-                            logger=wandb_logger, 
                             callbacks=callbacks,
                             log_every_n_steps=1,
                             strategy="ddp", 
                             enable_progress_bar=False)
-
         
             trainloader, valloader, _ = self.k_fold_split(batch_size=hp['batch_size'])
             for (fold_idx, fold) in enumerate(trainloader):
@@ -179,7 +174,6 @@ class MLPipe():
         else:
 
             callbacks = [
-                #TuneReportCallback({"val_loss": "ptl/val_loss"}, on="validation_end")
                 TuneReportCallback({"loss": "ptl/loss"}, on="fit_end"),
                 EarlyStopping(monitor="ptl/loss")
             
@@ -201,12 +195,12 @@ class MLPipe():
 
     def train_opt(self, hp):
 
-        wandb_logger = WandbLogger() # TODO: correct config
+        wandb_logger = WandbLogger(project=self.PROJECT['name'], name=self.PROJECT['experiment'])
         loss_func = nn.NLLLoss()
 
         callbacks = [
             ModelCheckpoint(dirpath="./models/", monitor='ptl/loss', save_top_k=3, save_last=True),
-            EarlyStopping(monitor="ptl/val_loss")
+            EarlyStopping(monitor="ptl/loss")
         ]
         
         self.trainer = Trainer(fast_dev_run=False, 
@@ -224,6 +218,7 @@ class MLPipe():
 
     def train(self):
         if self.is_hp:
+
             trainable = tune.with_parameters(self.train_trial, checkpoint_dir=None)
 
             scheduler = ASHAScheduler(
@@ -246,7 +241,7 @@ class MLPipe():
                 mode="min",
                 config=self.hp,
                 callbacks=[WandbLoggerCallback(
-                    project=self.PROJECT['name'],
+                    project=self.PROJECT['name']+'-HP',
                     group=self.PROJECT['experiment'],
                     api_key=self.WANDB['key'],
                     log_config=False)],
