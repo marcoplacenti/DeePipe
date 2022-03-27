@@ -133,8 +133,10 @@ dmypy.json
 .pyre/
 
 # data folder
-#data/
+data/
 
+# models folder
+models/
 
 wandb/
 tune_hp/
