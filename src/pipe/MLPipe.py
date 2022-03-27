@@ -29,6 +29,8 @@ import os
 from src.data.make_dataset import ImageDataset
 from src.models.model import Net
 
+import boto3
+
 TUNE_ORIG_WORKING_DIR = os.getcwd()
 
 
@@ -41,6 +43,15 @@ class MLPipe():
 
         self.__set_hp_params__()
 
+        self.__setup_dirs__()
+
+        self.boto3_sess = boto3.session.Session(profile_name='mopc')
+        self.s3_client = self.boto3_sess.client('s3')
+        self.bucket_name = 's202798-metastore'
+        
+        os.environ['AWS_ACCESS_KEY_ID'] = 'AKIAREQSLO36WUBAFX6K'
+        os.environ['AWS_SECRET_ACCESS_KEY'] = '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'
+        self.run = wandb.init(project=self.PROJECT['name'], name=self.PROJECT['experiment'], entity='dma')
 
     def __parse_config_dict__(self, config_dict):
 
@@ -90,6 +101,15 @@ class MLPipe():
             self.hp['gamma'] = self.OPTIMIZER['gamma']
         """
 
+    def __setup_dirs__(self):
+        if not os.path.exists('./data'):
+            os.makedirs('./data')
+        if not os.path.exists('./data/raw'):
+            os.makedirs('./data/raw')
+        if not os.path.exists('./data/raw/'+self.DATA['location'].split('/')[2]):
+            os.makedirs('./data/raw/'+self.DATA['location'].split('/')[2])
+
+
     def hold_out_split(self, batch_size):
         
         trainloader = DataLoader(self.trainset, 
@@ -127,7 +147,7 @@ class MLPipe():
         return trainloader_list, valloader_list, testloader
 
 
-    def preproc_data(self):
+    def preproc_data(self):        
         transform = transforms.Resize((
                         self.DATA['img-res'][0], 
                         self.DATA['img-res'][1]))
@@ -137,16 +157,42 @@ class MLPipe():
                         channels=self.channels,
                         transform=transform)
 
-        test_size = int(self.VALIDATION['test_size'] * len(self.dataset))
-        train_size = len(self.dataset) - test_size
-        self.trainset, self.testset = torch.utils.data.random_split(self.dataset, 
+        torch.save(self.dataset, './data/raw/'+self.DATA['location'].split('/')[2]+'/dataset.pt')
+
+        if set(['training', 'testing']).issubset(os.listdir(self.DATA['location'])):
+            self.trainset = ImageDataset(
+                        data_dir=self.DATA['location']+'training/',
+                        channels=self.channels,
+                        transform=transform
+            )
+
+            self.testset = ImageDataset(
+                        data_dir=self.DATA['location']+'testing/',
+                        channels=self.channels,
+                        transform=transform
+            )
+
+        else: 
+            test_size = int(self.VALIDATION['test_size'] * len(self.dataset))
+            train_size = len(self.dataset) - test_size
+            self.trainset, self.testset = torch.utils.data.random_split(self.dataset, 
                         [train_size, test_size])
 
-        torch.save(self.dataset, './data/raw/dataset.pt')
-        torch.save(self.trainset, './data/raw/trainset.pt')
-        torch.save(self.testset, './data/raw/testset.pt')
+        torch.save(self.trainset, './data/raw/'+self.DATA['location'].split('/')[2]+'/trainset.pt')
+        torch.save(self.testset, './data/raw/'+self.DATA['location'].split('/')[2]+'/testset.pt')
 
-        # TODO: create and upload artifacts both in S3 and wandb
+        self.upload_artifacts('data', './data/raw/'+self.DATA['location'].split('/')[2])
+
+    def upload_artifacts(self, artifact_type, path):
+        for obj in os.listdir(path):
+            obj_name = self.DATA['location'].split('/')[2]+'/'+artifact_type+'/'+obj
+            self.s3_client.upload_file('/'.join([path, obj]), 
+                    self.bucket_name, obj_name)
+
+            artifact = wandb.Artifact(obj, type=artifact_type)
+            artifact.add_reference('s3://'+self.bucket_name+'/'+obj_name)
+            self.run.log_artifact(artifact)
+
 
     def train_trial(self, hp, checkpoint_dir=None):
 

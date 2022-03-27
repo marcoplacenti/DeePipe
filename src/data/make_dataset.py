@@ -40,10 +40,16 @@ class ImageDataset(Dataset):
         return image, label
 
     def make_annotations(self):
-        return [["/".join([dir, img]), idx] \
-            for idx, dir in enumerate(os.listdir(self.img_dir)) \
-                for img in os.listdir("/".join([self.img_dir, dir]))]
+        annotations = []
+        class_idx = -1
+        for idx, dir in enumerate(os.listdir(self.img_dir)):
+            if os.path.isdir("/".join([self.img_dir, dir])):
+                class_idx += 1
+                for img in os.listdir("/".join([self.img_dir, dir])):
+                    annotations.append(["/".join([dir, img]), class_idx])
 
+        return annotations
+            
     def get_num_classes(self):
         return len(set(self.image_labels['label']))
 

@@ -14,3 +14,4 @@ uuid
 pytorch-lightning
 pytorch-lightning-bolts
 ray[tune]
+boto3
