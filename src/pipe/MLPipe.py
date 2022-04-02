@@ -185,7 +185,7 @@ class MLPipe():
         self.s3_client = session.client('s3')
 
         for obj in os.listdir(path):
-            obj_name = self.DATA['location'].split('/')[2]+'/'+artifact_type+'/'+obj
+            obj_name = self.PROJECT['name']+'/'+artifact_type+'/'+obj
             self.s3_client.upload_file('/'.join([path, obj]), 
                     bucket, obj_name)
 

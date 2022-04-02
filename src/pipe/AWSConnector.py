@@ -20,7 +20,7 @@ class AWSConnector:
 
         sts_client = self.session.client('sts')
             
-        role = self.assume_role()
+        role = self.__assume_role__()
         
         response = sts_client.assume_role(
             DurationSeconds=3600,
@@ -40,7 +40,7 @@ class AWSConnector:
                     aws_secret_access_key=secret_access_key, 
                     aws_session_token=session_token)
 
-        return session
+        return session, self.metastore_bucket_name
 
 
     def __create_or_get_role__(self):
@@ -54,19 +54,19 @@ class AWSConnector:
             
             iam_client.put_role_policy(
                 RoleName=role['Role']['RoleName'],
-                PolicyName='AllowS3-unixsce',
+                PolicyName='AllowS3-MLPipe',
                 PolicyDocument=self.__get_s3_policy_document__()
             )
 
             print('Role and inline policy created successfully.')
             time.sleep(10)
-        except ClientError as e:
+        except Exception as e:
             if e.response['Error']['Code'] == 'EntityAlreadyExists':
                 print('Role not created because it already exists.')
 
     def __get_s3_policy_document__(self):
         policy_document = {
-            'Version': '2022-01-01',
+            'Version': '2012-10-17',
             'Statement': [{
                 'Action': [
                     's3:GetObject', 's3:GetObjectTagging', 's3:PutObject',
@@ -83,7 +83,7 @@ class AWSConnector:
 
     def __get_role_policy_document__(self):
         role_policy_document = {
-            'Version': '2022-01-01',
+            'Version': '2012-10-17',
             'Statement': [{
                 'Effect': 'Allow',
                 'Principal': {'AWS': 'arn:aws:iam::752065963036:root'},
