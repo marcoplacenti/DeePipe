@@ -25,3 +25,6 @@ validation:
 wandb:
   key: str()
 
+aws:
+  profile: str()
+

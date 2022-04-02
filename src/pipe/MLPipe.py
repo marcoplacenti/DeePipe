@@ -1,8 +1,6 @@
 import torch
 import torch.nn as nn
 
-from torch.optim.lr_scheduler import StepLR
-
 from torch.utils.data import DataLoader
 from torchvision import transforms
 
@@ -12,7 +10,6 @@ from pytorch_lightning.callbacks.early_stopping import EarlyStopping
 from pytorch_lightning.loggers import WandbLogger
 
 from ray.tune.integration.pytorch_lightning import TuneReportCallback
-from ray.tune.logger import DEFAULT_LOGGERS
 from ray.tune.integration.wandb import WandbLoggerCallback
 from ray.tune.schedulers import ASHAScheduler
 from ray.tune import CLIReporter
@@ -28,8 +25,7 @@ import os
 
 from src.data.make_dataset import ImageDataset
 from src.models.model import Net
-
-import boto3
+from src.pipe.AWSConnector import AWSConnector
 
 TUNE_ORIG_WORKING_DIR = os.getcwd()
 
@@ -38,20 +34,20 @@ class MLPipe():
 
 
     def __init__(self, config_dict=None):
+
+        print("Initializing the Pipe!")
         
         self.__parse_config_dict__(config_dict)
 
         self.__set_hp_params__()
+        self.__set_aws_connector__()
 
-        self.__setup_dirs__()
-
-        self.boto3_sess = boto3.session.Session(profile_name='mopc')
-        self.s3_client = self.boto3_sess.client('s3')
-        self.bucket_name = 's202798-metastore'
+        self.__setup_dirs__()        
         
-        os.environ['AWS_ACCESS_KEY_ID'] = 'AKIAREQSLO36WUBAFX6K'
-        os.environ['AWS_SECRET_ACCESS_KEY'] = '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'
         self.run = wandb.init(project=self.PROJECT['name'], name=self.PROJECT['experiment'], entity='dma')
+
+    def __set_aws_connector__(self):
+        self.aws_connector = AWSConnector(self.PROJECT['name'], self.AWS)
 
     def __parse_config_dict__(self, config_dict):
 
@@ -62,6 +58,7 @@ class MLPipe():
         self.WANDB = config_dict['wandb']
         self.PROJECT = config_dict['project']
         self.VALIDATION = config_dict['validation']
+        self.AWS = config_dict['aws']
 
         try:
             self.PROJECT['experiment']
@@ -184,13 +181,16 @@ class MLPipe():
         self.upload_artifacts('data', './data/raw/'+self.DATA['location'].split('/')[2])
 
     def upload_artifacts(self, artifact_type, path):
+        session, bucket = self.aws_connector.S3_session()
+        self.s3_client = session.client('s3')
+
         for obj in os.listdir(path):
             obj_name = self.DATA['location'].split('/')[2]+'/'+artifact_type+'/'+obj
             self.s3_client.upload_file('/'.join([path, obj]), 
-                    self.bucket_name, obj_name)
+                    bucket, obj_name)
 
             artifact = wandb.Artifact(obj, type=artifact_type)
-            artifact.add_reference('s3://'+self.bucket_name+'/'+obj_name)
+            artifact.add_reference('s3://'+bucket+'/'+obj_name)
             self.run.log_artifact(artifact)
 
 
