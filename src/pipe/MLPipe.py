@@ -162,7 +162,8 @@ class MLPipe():
                             max_epochs=hp['max_epochs'], 
                             callbacks=callbacks,
                             log_every_n_steps=1,
-                            strategy="ddp", 
+                            #strategy="ddp", 
+                            #replace_sampler_ddp=False,
                             enable_progress_bar=False)
         
             trainloader, valloader, _ = self.k_fold_split(batch_size=hp['batch_size'])
@@ -184,7 +185,8 @@ class MLPipe():
                             logger=wandb_logger, 
                             callbacks=callbacks,
                             log_every_n_steps=1,
-                            strategy="ddp", 
+                            #strategy="ddp", 
+                            #replace_sampler_ddp=False,
                             enable_progress_bar=False)
 
             trainloader, _ = self.hold_out_split(batch_size=hp['batch_size'])
@@ -207,8 +209,9 @@ class MLPipe():
                             max_epochs=hp['max_epochs'],
                             logger=wandb_logger,
                             callbacks=callbacks,
-                            log_every_n_steps=1,
-                            strategy="ddp")
+                            log_every_n_steps=1)#,
+                            #strategy="ddp", 
+                            #replace_sampler_ddp=False)
     
         self.trainloader, self.testloader = self.hold_out_split(batch_size=hp['batch_size'])
         self.net = Net(dataset=self.dataset, in_channels=self.channels, hp=hp, loss_func=loss_func)
