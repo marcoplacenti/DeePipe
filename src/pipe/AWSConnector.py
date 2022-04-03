@@ -13,12 +13,12 @@ class AWSConnector:
         self.metastore_bucket_name = 'mopc-s202798-mlpipe-metastore'
 
     def S3_session(self):
-        self.session = Session(profile_name=self.profile_name)
+        self.contrib_session = Session(profile_name=self.profile_name)
         self.role_name = 'mopc-s202798-'+self.project_name+'-S3'
 
         self.__create_or_get_role__()
 
-        sts_client = self.session.client('sts')
+        sts_client = self.contrib_session.client('sts')
             
         role = self.__assume_role__()
         
@@ -36,15 +36,16 @@ class AWSConnector:
         os.environ['AWS_SECRET_ACCESS_KEY'] = secret_access_key
         os.environ['AWS_SESSION_TOKEN'] = session_token
 
-        session = Session(aws_access_key_id=access_key_id, 
+        role_session = Session(aws_access_key_id=access_key_id, 
                     aws_secret_access_key=secret_access_key, 
                     aws_session_token=session_token)
 
-        return session, self.metastore_bucket_name
+        del self.contrib_session
+        return role_session, self.metastore_bucket_name
 
 
     def __create_or_get_role__(self):
-        iam_client = self.session.client('iam')
+        iam_client = self.contrib_session.client('iam')
 
         try:
             role = iam_client.create_role(
@@ -58,11 +59,10 @@ class AWSConnector:
                 PolicyDocument=self.__get_s3_policy_document__()
             )
 
-            print('Role and inline policy created successfully.')
             time.sleep(10)
         except Exception as e:
             if e.response['Error']['Code'] == 'EntityAlreadyExists':
-                print('Role not created because it already exists.')
+                pass
 
     def __get_s3_policy_document__(self):
         policy_document = {
@@ -95,5 +95,5 @@ class AWSConnector:
 
 
     def __assume_role__(self):
-        iam_client = self.session.client('iam')
+        iam_client = self.contrib_session.client('iam')
         return iam_client.get_role(RoleName=self.role_name)

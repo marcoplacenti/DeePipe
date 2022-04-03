@@ -14,6 +14,7 @@ from ray.tune.integration.wandb import WandbLoggerCallback
 from ray.tune.schedulers import ASHAScheduler
 from ray.tune import CLIReporter
 from ray import tune
+import ray
 
 from sklearn.model_selection import KFold
 
@@ -28,26 +29,22 @@ from src.models.model import Net
 from src.pipe.AWSConnector import AWSConnector
 
 TUNE_ORIG_WORKING_DIR = os.getcwd()
+os.environ['WANDB_SILENT']="true"
 
 
 class MLPipe():
 
-
     def __init__(self, config_dict=None):
-
-        print("Initializing the Pipe!")
         
         self.__parse_config_dict__(config_dict)
-
         self.__set_hp_params__()
         self.__set_aws_connector__()
-
         self.__setup_dirs__()        
-        
-        self.run = wandb.init(project=self.PROJECT['name'], name=self.PROJECT['experiment'], entity='dma')
+
 
     def __set_aws_connector__(self):
         self.aws_connector = AWSConnector(self.PROJECT['name'], self.AWS)
+
 
     def __parse_config_dict__(self, config_dict):
 
@@ -84,19 +81,6 @@ class MLPipe():
         else:
             self.hp['lr'] = self.OPTIMIZER['learning_rate']
 
-        """
-        if isinstance(self.OPTIMIZER['step_size'], list):
-            self.hp['step_size'] = tune.choice(self.OPTIMIZER['step_size'])
-            self.is_hp = True
-        else:
-           self.hp['step_size'] = self.OPTIMIZER['step_size']
-
-        if isinstance(self.OPTIMIZER['gamma'], list):
-            self.hp['gamma'] = tune.loguniform(self.OPTIMIZER['gamma'][0], self.OPTIMIZER['gamma'][1])
-            self.is_hp = True
-        else:
-            self.hp['gamma'] = self.OPTIMIZER['gamma']
-        """
 
     def __setup_dirs__(self):
         if not os.path.exists('./data'):
@@ -105,6 +89,11 @@ class MLPipe():
             os.makedirs('./data/raw')
         if not os.path.exists('./data/raw/'+self.DATA['location'].split('/')[2]):
             os.makedirs('./data/raw/'+self.DATA['location'].split('/')[2])
+
+        if not os.path.exists('./trials'):
+            os.makedirs('./trials')
+        if not os.path.exists('./trials/'+self.PROJECT['experiment']):
+            os.makedirs('./trials/'+self.PROJECT['experiment'])
 
 
     def hold_out_split(self, batch_size):
@@ -182,16 +171,25 @@ class MLPipe():
 
     def upload_artifacts(self, artifact_type, path):
         session, bucket = self.aws_connector.S3_session()
-        self.s3_client = session.client('s3')
+        s3_client = session.client('s3')
 
-        for obj in os.listdir(path):
-            obj_name = self.PROJECT['name']+'/'+artifact_type+'/'+obj
-            self.s3_client.upload_file('/'.join([path, obj]), 
-                    bucket, obj_name)
+        run = wandb.init(project=self.PROJECT['name'], name=self.PROJECT['experiment'], entity='dma')
 
-            artifact = wandb.Artifact(obj, type=artifact_type)
-            artifact.add_reference('s3://'+bucket+'/'+obj_name)
-            self.run.log_artifact(artifact)
+        for root, _, files in os.walk(path):
+            for obj in files:
+                if artifact_type == 'data':
+                    obj_name = self.PROJECT['name']+'/'+artifact_type+'/'+obj
+                elif artifact_type == 'trials':
+                    obj_name = self.PROJECT['name']+'/'+artifact_type+'/'+'/'.join(root.split('/')[2:])+'/'+obj
+                s3_client.upload_file(os.path.join(root, obj), bucket, obj_name)
+
+                artifact = wandb.Artifact(obj, type=artifact_type)
+                artifact.add_reference('s3://'+bucket+'/'+obj_name)
+                run.log_artifact(artifact)
+
+        del s3_client
+        del session
+        wandb.finish()
 
 
     def train_trial(self, hp, checkpoint_dir=None):
@@ -211,7 +209,7 @@ class MLPipe():
                             max_epochs=hp['max_epochs'], 
                             callbacks=callbacks,
                             log_every_n_steps=1,
-                            strategy="ddp", 
+                            #strategy="ddp", 
                             enable_progress_bar=False)
         
             trainloader, valloader, _ = self.k_fold_split(batch_size=hp['batch_size'])
@@ -233,7 +231,7 @@ class MLPipe():
                             logger=wandb_logger, 
                             callbacks=callbacks,
                             log_every_n_steps=1,
-                            strategy="ddp", 
+                            #strategy="ddp", 
                             enable_progress_bar=False)
 
             trainloader, _ = self.hold_out_split(batch_size=hp['batch_size'])
@@ -256,8 +254,8 @@ class MLPipe():
                             max_epochs=hp['max_epochs'],
                             logger=wandb_logger,
                             callbacks=callbacks,
-                            log_every_n_steps=1,
-                            strategy="ddp")
+                            log_every_n_steps=1)#,
+                           # strategy="ddp")
     
         self.trainloader, self.testloader = self.hold_out_split(batch_size=hp['batch_size'])
         self.net = Net(dataset=self.dataset, in_channels=self.channels, hp=hp, loss_func=loss_func)
@@ -268,6 +266,7 @@ class MLPipe():
     def train(self):
         if self.is_hp:
 
+            ray.init(log_to_driver=False)
             trainable = tune.with_parameters(self.train_trial, checkpoint_dir=None)
 
             scheduler = ASHAScheduler(
@@ -285,7 +284,7 @@ class MLPipe():
                     "cpu": 1,
                     "gpu": 0
                 },
-                local_dir=".",
+                local_dir='./trials',
                 metric="loss",
                 mode="min",
                 config=self.hp,
@@ -296,8 +295,10 @@ class MLPipe():
                     log_config=False)],
                 num_samples=self.TUNING['number_trials'],
                 scheduler=scheduler,
-                name="tune_hp",
+                name=self.PROJECT['experiment'],
                 verbose=0)
+
+            self.upload_artifacts('trials', './trials/'+self.PROJECT['experiment'])
 
             final_config = analysis.best_config
             

@@ -30,8 +30,8 @@ def parse_config(args):
 def run(config_dict):
     pipe = MLPipe(config_dict)
     pipe.preproc_data()
-    #pipe.train()
-    #pipe.eval()
+    pipe.train()
+    pipe.eval()
     
 
 if __name__ == "__main__":

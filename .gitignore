@@ -139,5 +139,6 @@ data/
 models/
 
 wandb/
-tune_hp/
+trials/
 lightning_logs/
+
