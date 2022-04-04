@@ -3,7 +3,7 @@ project:
   task: classification
 
 data:
-  location: data/MNISTMini/
+  location: data/source/MNISTMini/
   img-res: [28,28]
   greyscale: false
 
@@ -12,15 +12,12 @@ training:
   batch_size: [64, 128]
 
 optimizer:
+  algorithm: Adam
   learning_rate: [0.0001, 0.01]
-  step_size: 30
-  gamma: 0.1
+
+tuning:
   number_trials: 3
 
 validation:
-  test_size: 0.2
+  test_size: 0.2 # ignored if a presplit test dataset is provided
   folds: 2
-
-wandb:
-  key: 24b2e4eab14cdb91e7d3c8177f62af82c5911723 # ${{ secrets.WANDB_KEY }}
-

@@ -16,10 +16,9 @@ class Net(pl.LightningModule):
         self.num_classes = self.dataset.get_num_classes()
         self.loss_func = loss_func
 
-        self.channels = [64]
-        self.conv1 = nn.Conv2d(in_channels=in_channels, out_channels=self.channels[0], 
+        self.conv1 = nn.Conv2d(in_channels=in_channels, out_channels=64, 
             kernel_size=4, stride=1, padding=2)
-        self.conv2 = nn.Conv2d(in_channels=self.channels[0], out_channels=32, 
+        self.conv2 = nn.Conv2d(in_channels=64, out_channels=32, 
             kernel_size=4, stride=1, padding=2)
 
         self.max_pool2d = nn.MaxPool2d(kernel_size=2, stride=2)

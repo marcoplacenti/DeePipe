@@ -7,9 +7,12 @@ opencv-python
 pillow
 argparse
 pyyaml
+yamale
 scikit-learn
 wandb
 uuid
 pytorch-lightning
 pytorch-lightning-bolts
 ray[tune]
+boto3
+botocore

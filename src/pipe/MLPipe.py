@@ -1,8 +1,6 @@
 import torch
 import torch.nn as nn
 
-from torch.optim.lr_scheduler import StepLR
-
 from torch.utils.data import DataLoader
 from torchvision import transforms
 
@@ -12,11 +10,11 @@ from pytorch_lightning.callbacks.early_stopping import EarlyStopping
 from pytorch_lightning.loggers import WandbLogger
 
 from ray.tune.integration.pytorch_lightning import TuneReportCallback
-from ray.tune.logger import DEFAULT_LOGGERS
 from ray.tune.integration.wandb import WandbLoggerCallback
 from ray.tune.schedulers import ASHAScheduler
 from ray.tune import CLIReporter
 from ray import tune
+import ray
 
 from sklearn.model_selection import KFold
 
@@ -28,30 +26,32 @@ import os
 
 from src.data.make_dataset import ImageDataset
 from src.models.model import Net
+from src.pipe.AWSConnector import AWSConnector
 
 TUNE_ORIG_WORKING_DIR = os.getcwd()
+os.environ['WANDB_SILENT']="true"
 
 
 class MLPipe():
 
-
     def __init__(self, config_dict=None):
         
         self.__parse_config_dict__(config_dict)
-
         self.__set_hp_params__()
+        self.__set_aws_connector__()
+        self.__setup_dirs__()        
 
-        #wandb.login(key=self.WANDB['key'])
-        #wandb.init(project=self.PROJECT['name'], name=self.PROJECT['experiment'])
+
+    def __set_aws_connector__(self):
+        self.aws_connector = AWSConnector(self.PROJECT['name'])
 
 
     def __parse_config_dict__(self, config_dict):
-        # TODO: do actual parsing and validate argument, else throw error
 
         self.DATA = config_dict['data']
         self.TRAINING_HP = config_dict['training']
         self.OPTIMIZER = config_dict['optimizer']
-        self.WANDB = config_dict['wandb']
+        self.TUNING = config_dict['tuning']
         self.PROJECT = config_dict['project']
         self.VALIDATION = config_dict['validation']
 
@@ -79,17 +79,19 @@ class MLPipe():
         else:
             self.hp['lr'] = self.OPTIMIZER['learning_rate']
 
-        if isinstance(self.OPTIMIZER['step_size'], list):
-            self.hp['step_size'] = tune.choice(self.OPTIMIZER['step_size'])
-            self.is_hp = True
-        else:
-           self.hp['step_size'] = self.OPTIMIZER['step_size']
 
-        if isinstance(self.OPTIMIZER['gamma'], list):
-            self.hp['gamma'] = tune.loguniform(self.OPTIMIZER['gamma'][0], self.OPTIMIZER['gamma'][1])
-            self.is_hp = True
-        else:
-            self.hp['gamma'] = self.OPTIMIZER['gamma']
+    def __setup_dirs__(self):
+        if not os.path.exists('./data'):
+            os.makedirs('./data')
+        if not os.path.exists('./data/raw'):
+            os.makedirs('./data/raw')
+        if not os.path.exists('./data/raw/'+self.DATA['location'].split('/')[2]):
+            os.makedirs('./data/raw/'+self.DATA['location'].split('/')[2])
+
+        if not os.path.exists('./trials'):
+            os.makedirs('./trials')
+        if not os.path.exists('./trials/'+self.PROJECT['experiment']):
+            os.makedirs('./trials/'+self.PROJECT['experiment'])
 
 
     def hold_out_split(self, batch_size):
@@ -129,7 +131,7 @@ class MLPipe():
         return trainloader_list, valloader_list, testloader
 
 
-    def preproc_data(self):
+    def preproc_data(self):        
         transform = transforms.Resize((
                         self.DATA['img-res'][0], 
                         self.DATA['img-res'][1]))
@@ -139,10 +141,53 @@ class MLPipe():
                         channels=self.channels,
                         transform=transform)
 
-        test_size = int(self.VALIDATION['test_size'] * len(self.dataset))
-        train_size = len(self.dataset) - test_size
-        self.trainset, self.testset = torch.utils.data.random_split(self.dataset, 
+        torch.save(self.dataset, './data/raw/'+self.DATA['location'].split('/')[2]+'/dataset.pt')
+
+        if set(['training', 'testing']).issubset(os.listdir(self.DATA['location'])):
+            self.trainset = ImageDataset(
+                        data_dir=self.DATA['location']+'training/',
+                        channels=self.channels,
+                        transform=transform
+            )
+
+            self.testset = ImageDataset(
+                        data_dir=self.DATA['location']+'testing/',
+                        channels=self.channels,
+                        transform=transform
+            )
+
+        else: 
+            test_size = int(self.VALIDATION['test_size'] * len(self.dataset))
+            train_size = len(self.dataset) - test_size
+            self.trainset, self.testset = torch.utils.data.random_split(self.dataset, 
                         [train_size, test_size])
+
+        torch.save(self.trainset, './data/raw/'+self.DATA['location'].split('/')[2]+'/trainset.pt')
+        torch.save(self.testset, './data/raw/'+self.DATA['location'].split('/')[2]+'/testset.pt')
+
+        self.upload_artifacts('data', './data/raw/'+self.DATA['location'].split('/')[2])
+
+    def upload_artifacts(self, artifact_type, path):
+        session, bucket = self.aws_connector.S3_session()
+        s3_client = session.client('s3')
+
+        run = wandb.init(project=self.PROJECT['name'], name=self.PROJECT['experiment'], entity='dma')
+
+        for root, _, files in os.walk(path):
+            for obj in files:
+                if artifact_type == 'data':
+                    obj_name = self.PROJECT['name']+'/'+artifact_type+'/'+obj
+                elif artifact_type == 'trials':
+                    obj_name = self.PROJECT['name']+'/'+artifact_type+'/'+'/'.join(root.split('/')[2:])+'/'+obj
+                s3_client.upload_file(os.path.join(root, obj), bucket, obj_name)
+
+                artifact = wandb.Artifact(obj, type=artifact_type)
+                artifact.add_reference('s3://'+bucket+'/'+obj_name)
+                run.log_artifact(artifact)
+
+        del s3_client
+        del session
+        wandb.finish()
 
 
     def train_trial(self, hp, checkpoint_dir=None):
@@ -162,8 +207,6 @@ class MLPipe():
                             max_epochs=hp['max_epochs'], 
                             callbacks=callbacks,
                             log_every_n_steps=1,
-                            #strategy="ddp", 
-                            #replace_sampler_ddp=False,
                             enable_progress_bar=False)
         
             trainloader, valloader, _ = self.k_fold_split(batch_size=hp['batch_size'])
@@ -185,8 +228,6 @@ class MLPipe():
                             logger=wandb_logger, 
                             callbacks=callbacks,
                             log_every_n_steps=1,
-                            #strategy="ddp", 
-                            #replace_sampler_ddp=False,
                             enable_progress_bar=False)
 
             trainloader, _ = self.hold_out_split(batch_size=hp['batch_size'])
@@ -209,9 +250,7 @@ class MLPipe():
                             max_epochs=hp['max_epochs'],
                             logger=wandb_logger,
                             callbacks=callbacks,
-                            log_every_n_steps=1)#,
-                            #strategy="ddp", 
-                            #replace_sampler_ddp=False)
+                            log_every_n_steps=1)
     
         self.trainloader, self.testloader = self.hold_out_split(batch_size=hp['batch_size'])
         self.net = Net(dataset=self.dataset, in_channels=self.channels, hp=hp, loss_func=loss_func)
@@ -222,6 +261,7 @@ class MLPipe():
     def train(self):
         if self.is_hp:
 
+            ray.init(log_to_driver=False)
             trainable = tune.with_parameters(self.train_trial, checkpoint_dir=None)
 
             scheduler = ASHAScheduler(
@@ -239,19 +279,21 @@ class MLPipe():
                     "cpu": 1,
                     "gpu": 0
                 },
-                local_dir=".",
+                local_dir='./trials',
                 metric="loss",
                 mode="min",
                 config=self.hp,
                 callbacks=[WandbLoggerCallback(
                     project=self.PROJECT['name']+'-HP',
                     group=self.PROJECT['experiment'],
-                    api_key=self.WANDB['key'],
+                    api_key=os.environ['WANDB_KEY'],
                     log_config=False)],
-                num_samples=self.OPTIMIZER['number_trials'],
+                num_samples=self.TUNING['number_trials'],
                 scheduler=scheduler,
-                name="tune_hp",
+                name=self.PROJECT['experiment'],
                 verbose=0)
+
+            self.upload_artifacts('trials', './trials/'+self.PROJECT['experiment'])
 
             final_config = analysis.best_config
             

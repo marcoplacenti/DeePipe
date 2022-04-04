@@ -1,0 +1,25 @@
+project:
+  name: str()
+  task: str()
+
+data:
+  location: str()
+  img-res: list(int(min=1), int(min=1))
+  greyscale: bool()
+
+training:
+  max_epochs: int(min=1)
+  batch_size: list(int(min=1), int(min=2))
+
+optimizer:
+  algorithm: enum('Adam', 'SGD')
+  learning_rate: list(num(), num())
+
+tuning:
+  number_trials: int(required=False)
+
+validation:
+  test_size: num()
+  folds: int()
+
+
