@@ -7,13 +7,13 @@ import os
 
 
 class AWSConnector:
-    def __init__(self, project_name, aws_config):
+    def __init__(self, project_name):
         self.project_name = project_name
-        self.profile_name = aws_config['profile']
         self.metastore_bucket_name = 'mopc-s202798-mlpipe-metastore'
 
     def S3_session(self):
-        self.contrib_session = Session(profile_name=self.profile_name)
+        self.contrib_session = Session(aws_access_key_id=os.environ['CLOUD_DEVOPS_USER_ACCESS_KEY_ID'],
+                                    aws_secret_access_key=os.environ['CLOUD_DEVOPS_USER_SECRET_ACCESS_KEY'])
         self.role_name = 'mopc-s202798-'+self.project_name+'-S3'
 
         self.__create_or_get_role__()

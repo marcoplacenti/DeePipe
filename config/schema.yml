@@ -22,9 +22,4 @@ validation:
   test_size: num()
   folds: int()
 
-wandb:
-  key: str()
-
-aws:
-  profile: str()
 

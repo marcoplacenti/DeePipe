@@ -43,7 +43,7 @@ class MLPipe():
 
 
     def __set_aws_connector__(self):
-        self.aws_connector = AWSConnector(self.PROJECT['name'], self.AWS)
+        self.aws_connector = AWSConnector(self.PROJECT['name'])
 
 
     def __parse_config_dict__(self, config_dict):
@@ -52,10 +52,8 @@ class MLPipe():
         self.TRAINING_HP = config_dict['training']
         self.OPTIMIZER = config_dict['optimizer']
         self.TUNING = config_dict['tuning']
-        self.WANDB = config_dict['wandb']
         self.PROJECT = config_dict['project']
         self.VALIDATION = config_dict['validation']
-        self.AWS = config_dict['aws']
 
         try:
             self.PROJECT['experiment']
@@ -291,7 +289,7 @@ class MLPipe():
                 callbacks=[WandbLoggerCallback(
                     project=self.PROJECT['name']+'-HP',
                     group=self.PROJECT['experiment'],
-                    api_key=self.WANDB['key'],
+                    api_key=os.environ['WANDB_KEY'],
                     log_config=False)],
                 num_samples=self.TUNING['number_trials'],
                 scheduler=scheduler,
