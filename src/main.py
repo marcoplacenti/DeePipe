@@ -2,10 +2,20 @@ from src.pipe.MLPipe import MLPipe
 
 import argparse
 
-def run(config_dict):
+def mode_1(config_dict):
+    ### OPTION 1 ###
+    print("Option 1")
     pipe = MLPipe(config_dict)
     pipe.preproc_data()
     pipe.train()
+    pipe.eval()
+
+def mode_2():
+    ### OPTION 2 ###
+    print("Option 2")
+    pipe = MLPipe(name='ImageClassificationV2', task='classification')
+    pipe.preproc_data(location='data/source/MNISTMini/', img_res=[28,28], greyscale=False, test_size=0.2, folds=2)
+    pipe.train(max_epochs=1, batch_size=[64, 128], optimizer='Adam', learning_rate=[0.0001, 0.01], number_trials=3)
     pipe.eval()
     
 
@@ -14,6 +24,7 @@ if __name__ == "__main__":
     parser.add_argument("--config", help="Provide path to configuration file")
     args = parser.parse_args()
 
-    run(args.config)
+    #mode_1(args.config)
+    mode_2()
     
     

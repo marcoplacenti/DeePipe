@@ -43,17 +43,17 @@ class MLPipe():
             self.config_file_flag = False
             assert name
             assert task
-            config_dict = {'project': {'name': name, 'task': task}}
+            self.PROJECT = {'name': name, 'task': task}
             if not experiment:
                 experiment = str(datetime.datetime.now())+'-'+str(uuid.uuid4().hex)
-            config_dict['project']['experiment'] = experiment
+            self.PROJECT['experiment'] = experiment
         else:
             self.config_file_flag = True
             config_dict = self.__validate_configuration__(config_file)
             self.__parse_config_dict__(config_dict)
+            self.__set_hp_params__()
 
-        self.__set_aws_connector__()
-        self.__setup_dirs__()        
+        self.__set_aws_connector__()    
 
     
     def __validate_configuration__(self, config_file):
@@ -93,6 +93,7 @@ class MLPipe():
         self.channels = (1 if self.DATA['greyscale'] else 3)
 
     def __fill_hp_dict(self, max_epochs, batch_size, optimizer, learning_rate):
+        self.is_hp = False
         self.hp = {'max_epochs': max_epochs}
 
         if isinstance(batch_size, list):
@@ -114,20 +115,19 @@ class MLPipe():
             self.hp['optimizer'] = optimizer
 
 
-    def __set_hp_params__(self, max_epochs=None, batch_size=None, optimizer=None, learning_rate=None):
-        self.is_hp = False
-        if self.config_file_flag:
-            self.__fill_hp_dict(self.TRAINING_HP['max_epochs'], 
+    def __set_hp_params__(self, max_epochs=None, batch_size=None, optimizer=None, learning_rate=None, number_trials=None):
+        if not self.config_file_flag:
+            self.TRAINING_HP = {'max_epochs': max_epochs, 'batch_size': batch_size}
+            self.OPTIMIZATION = {'optimizer': optimizer, 'learning_rate': learning_rate}
+            self.TUNING = {'number_trials': number_trials}
+
+        self.__fill_hp_dict(self.TRAINING_HP['max_epochs'], 
                                 self.TRAINING_HP['batch_size'], 
                                 self.OPTIMIZATION['optimizer'], 
                                 self.OPTIMIZATION['learning_rate'])
-            
-        else:
-            self.__fill_hp_dict(max_epochs, batch_size, optimizer, learning_rate)
 
 
-
-    def __setup_dirs__(self):
+    def __setup_data_dirs__(self):
         if not os.path.exists('./data'):
             os.makedirs('./data')
         if not os.path.exists('./data/raw'):
@@ -135,6 +135,8 @@ class MLPipe():
         if not os.path.exists('./data/raw/'+self.DATA['location'].split('/')[2]):
             os.makedirs('./data/raw/'+self.DATA['location'].split('/')[2])
 
+
+    def __setup_train_dirs__(self):
         if not os.path.exists('./trials'):
             os.makedirs('./trials')
         if not os.path.exists('./trials/'+self.PROJECT['experiment']):
@@ -178,7 +180,18 @@ class MLPipe():
         return trainloader_list, valloader_list, testloader
 
 
-    def preproc_data(self):        
+    def __set_data_params__(self, location, img_res, greyscale, test_size, folds):
+        self.DATA = {'location': location, 'img-res': img_res, 'greyscale': greyscale}
+        self.VALIDATION = {'test_size': test_size, 'folds': folds}
+
+        self.channels = (1 if self.DATA['greyscale'] else 3)
+
+    def preproc_data(self, location=None, img_res=None, greyscale=None, test_size=None, folds=None):
+        if not self.config_file_flag:
+            self.__set_data_params__(location, img_res, greyscale, test_size, folds)
+
+        self.__setup_data_dirs__()
+
         transform = transforms.Resize((
                         self.DATA['img-res'][0], 
                         self.DATA['img-res'][1]))
@@ -305,10 +318,13 @@ class MLPipe():
         self.trainer.fit(self.net, self.trainloader)
 
 
-    def train(self, max_epochs=None, batch_size=None, optimizer=None, learning_rate=None):
-        self.__set_hp_params__(max_epochs, batch_size, optimizer, learning_rate)
-        if self.is_hp:
+    def train(self, max_epochs=None, batch_size=None, optimizer=None, learning_rate=None, number_trials=None):
+        if not self.config_file_flag:
+            self.__set_hp_params__(max_epochs, batch_size, optimizer, learning_rate, number_trials)
+        self.__setup_train_dirs__()
 
+        if self.is_hp:
+            ray.shutdown()
             ray.init(log_to_driver=False)
             trainable = tune.with_parameters(self.train_trial, checkpoint_dir=None)
 
@@ -346,7 +362,7 @@ class MLPipe():
             final_config = analysis.best_config
             
             self.train_opt(final_config)
-
+            
         else:
             self.train_opt(self.hp)
 

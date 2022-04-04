@@ -142,3 +142,5 @@ wandb/
 trials/
 lightning_logs/
 
+# other files
+set_environ.sh
