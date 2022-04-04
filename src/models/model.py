@@ -11,6 +11,7 @@ class Net(pl.LightningModule):
     def __init__(self, dataset, in_channels, hp, loss_func):
         super(Net, self).__init__()
 
+        self.optimizer = hp['optimizer']
         self.lr = hp['lr']
         self.dataset = dataset
         self.num_classes = self.dataset.get_num_classes()
@@ -91,6 +92,7 @@ class Net(pl.LightningModule):
         self.log("ptl/test_acc", avg_acc)
 
     def configure_optimizers(self):
-        return torch.optim.Adam(self.parameters(), 
+        if self.optimizer.lower() == 'adam':
+            return torch.optim.Adam(self.parameters(), 
                             lr=self.lr)
 

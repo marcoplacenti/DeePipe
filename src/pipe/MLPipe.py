@@ -20,6 +20,9 @@ from sklearn.model_selection import KFold
 
 import wandb
 
+import yaml
+import yamale
+
 import uuid
 import datetime
 import os
@@ -34,12 +37,39 @@ os.environ['WANDB_SILENT']="true"
 
 class MLPipe():
 
-    def __init__(self, config_dict=None):
+    def __init__(self, config_file=None, name=None, experiment=None, task=None):
         
-        self.__parse_config_dict__(config_dict)
-        self.__set_hp_params__()
+        if not config_file:
+            self.config_file_flag = False
+            assert name
+            assert task
+            config_dict = {'project': {'name': name, 'task': task}}
+            if not experiment:
+                experiment = str(datetime.datetime.now())+'-'+str(uuid.uuid4().hex)
+            config_dict['project']['experiment'] = experiment
+        else:
+            self.config_file_flag = True
+            config_dict = self.__validate_configuration__(config_file)
+            self.__parse_config_dict__(config_dict)
+
         self.__set_aws_connector__()
         self.__setup_dirs__()        
+
+    
+    def __validate_configuration__(self, config_file):
+        schema = yamale.make_schema('./config/schema.yml')
+        data = yamale.make_data(config_file)
+
+        try:
+            yamale.validate(schema, data)
+            with open(config_file) as infile:
+                config_dict = yaml.load(infile, Loader=yaml.SafeLoader)
+
+            return config_dict
+        except Exception as e:
+            print(e)
+            print("Provided yaml file not acceptable.")
+            exit(1)
 
 
     def __set_aws_connector__(self):
@@ -50,7 +80,7 @@ class MLPipe():
 
         self.DATA = config_dict['data']
         self.TRAINING_HP = config_dict['training']
-        self.OPTIMIZER = config_dict['optimizer']
+        self.OPTIMIZATION = config_dict['optimization']
         self.TUNING = config_dict['tuning']
         self.PROJECT = config_dict['project']
         self.VALIDATION = config_dict['validation']
@@ -62,22 +92,39 @@ class MLPipe():
 
         self.channels = (1 if self.DATA['greyscale'] else 3)
 
+    def __fill_hp_dict(self, max_epochs, batch_size, optimizer, learning_rate):
+        self.hp = {'max_epochs': max_epochs}
 
-    def __set_hp_params__(self):
+        if isinstance(batch_size, list):
+            self.hp['batch_size'] = tune.choice(batch_size)
+            self.is_hp = True
+        else:
+            self.hp['batch_size'] = batch_size
+
+        if isinstance(learning_rate, list):
+            self.hp['lr'] = tune.loguniform(learning_rate[0], learning_rate[1])
+            self.is_hp = True
+        else:
+            self.hp['lr'] = learning_rate
+
+        if isinstance(optimizer, list):
+            self.hp['optimizer'] = tune.choice(optimizer)
+            self.is_hp = True
+        else:
+            self.hp['optimizer'] = optimizer
+
+
+    def __set_hp_params__(self, max_epochs=None, batch_size=None, optimizer=None, learning_rate=None):
         self.is_hp = False
-        self.hp = {'max_epochs': self.TRAINING_HP['max_epochs']}
-
-        if isinstance(self.TRAINING_HP['batch_size'], list):
-            self.hp['batch_size'] = tune.choice(self.TRAINING_HP['batch_size'])
-            self.is_hp = True
+        if self.config_file_flag:
+            self.__fill_hp_dict(self.TRAINING_HP['max_epochs'], 
+                                self.TRAINING_HP['batch_size'], 
+                                self.OPTIMIZATION['optimizer'], 
+                                self.OPTIMIZATION['learning_rate'])
+            
         else:
-            self.hp['batch_size'] = self.TRAINING_HP['batch_size']
+            self.__fill_hp_dict(max_epochs, batch_size, optimizer, learning_rate)
 
-        if isinstance(self.OPTIMIZER['learning_rate'], list):
-            self.hp['lr'] = tune.loguniform(self.OPTIMIZER['learning_rate'][0], self.OPTIMIZER['learning_rate'][1])
-            self.is_hp = True
-        else:
-            self.hp['lr'] = self.OPTIMIZER['learning_rate']
 
 
     def __setup_dirs__(self):
@@ -258,7 +305,8 @@ class MLPipe():
         self.trainer.fit(self.net, self.trainloader)
 
 
-    def train(self):
+    def train(self, max_epochs=None, batch_size=None, optimizer=None, learning_rate=None):
+        self.__set_hp_params__(max_epochs, batch_size, optimizer, learning_rate)
         if self.is_hp:
 
             ray.init(log_to_driver=False)

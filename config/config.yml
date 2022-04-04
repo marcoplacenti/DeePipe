@@ -11,8 +11,8 @@ training:
   max_epochs: 1
   batch_size: [64, 128]
 
-optimizer:
-  algorithm: Adam
+optimization:
+  optimizer: Adam
   learning_rate: [0.0001, 0.01]
 
 tuning:

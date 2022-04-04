@@ -1,6 +1,7 @@
 project:
   name: str()
   task: str()
+  experiment: str(required=False)
 
 data:
   location: str()
@@ -11,8 +12,8 @@ training:
   max_epochs: int(min=1)
   batch_size: list(int(min=1), int(min=2))
 
-optimizer:
-  algorithm: enum('Adam', 'SGD')
+optimization:
+  optimizer: enum('Adam', 'SGD')
   learning_rate: list(num(), num())
 
 tuning:
@@ -21,5 +22,3 @@ tuning:
 validation:
   test_size: num()
   folds: int()
-
-
