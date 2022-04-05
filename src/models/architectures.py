@@ -6,10 +6,10 @@ import math
 
 class SimpleModel(nn.Module):
     
-    def __init__(self, num_classes=10):
+    def __init__(self, in_channels=1, num_classes=10):
         super(SimpleModel, self).__init__()
         self.classifier = nn.Sequential(
-                nn.Conv2d(in_channels=1, out_channels=64, 
+                nn.Conv2d(in_channels=in_channels, out_channels=64, 
                     kernel_size=4, stride=1, padding=2),
                 nn.ReLU(),
                 nn.Conv2d(in_channels=64, out_channels=32, 
@@ -72,9 +72,9 @@ class VGG(nn.Module):
         return s
         
     
-    def __init__(self, num_classes=10):
+    def __init__(self, in_channels=1, num_classes=10):
         super(VGG, self).__init__()
-        self.l1 = self.two_conv_pool(1, 64, 64)
+        self.l1 = self.two_conv_pool(in_channels, 64, 64)
         self.l2 = self.two_conv_pool(64, 128, 128)
         self.l3 = self.three_conv_pool(128, 256, 256, 256)
         self.l4 = self.three_conv_pool(256, 256, 256, 256)

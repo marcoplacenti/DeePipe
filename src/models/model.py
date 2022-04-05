@@ -8,13 +8,11 @@ from torchvision import transforms
 import pytorch_lightning as pl
 
 class Model(pl.LightningModule):
-    def __init__(self, architecture, dataset, in_channels, hp, loss_func):
+    def __init__(self, architecture, hp, loss_func):
         super(Model, self).__init__()
 
         self.optimizer = hp['optimizer']
         self.lr = hp['lr']
-        self.dataset = dataset
-        self.num_classes = self.dataset.get_num_classes()
         self.loss_func = loss_func
 
         self.model = architecture
@@ -22,16 +20,6 @@ class Model(pl.LightningModule):
         
     def forward(self, x):
         return self.model(x)
-        x = self.conv1(x)
-        x = self.relu(x)
-        x = self.conv2(x)
-        x = self.relu(x)
-        x = self.max_pool2d(x)
-        x = self.dropout1(x)
-        x = self.flatten(x)
-        x = self.linear(x)
-        x = self.log_softmax(x)
-        return x
 
     def training_step(self, batch, batch_idx):
         images, labels = batch

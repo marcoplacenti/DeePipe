@@ -40,10 +40,6 @@ os.environ['WANDB_SILENT']="true"
 class MLPipe():
 
     def __init__(self, config_file=None, name=None, experiment=None, task=None):
-        
-        self.model = VGG(10)
-        self.model = SimpleModel(10)
-
 
         if not config_file:
             self.config_file_flag = False
@@ -233,7 +229,7 @@ class MLPipe():
         torch.save(self.trainset, './data/raw/'+self.DATA['location'].split('/')[2]+'/trainset.pt')
         torch.save(self.testset, './data/raw/'+self.DATA['location'].split('/')[2]+'/testset.pt')
 
-        #self.upload_artifacts('data', './data/raw/'+self.DATA['location'].split('/')[2])
+        self.upload_artifacts('data', './data/raw/'+self.DATA['location'].split('/')[2])
 
     def upload_artifacts(self, artifact_type, path):
         session, bucket = self.aws_connector.S3_session()
@@ -279,7 +275,7 @@ class MLPipe():
         
             trainloader, valloader, _ = self.k_fold_split(batch_size=hp['batch_size'])
             for (fold_idx, fold) in enumerate(trainloader):
-                net = Model(model=self.model, dataset=self.dataset, in_channels=self.channels, hp=hp, loss_func=loss_func)
+                net = Model(model=self.model, hp=hp, loss_func=loss_func)
 
                 trainer.fit(net, trainloader[fold_idx], valloader[fold_idx])
                     
@@ -299,7 +295,7 @@ class MLPipe():
                             enable_progress_bar=False)
 
             trainloader, _ = self.hold_out_split(batch_size=hp['batch_size'])
-            net = Model(architecture=self.model, dataset=self.dataset, in_channels=self.channels, hp=hp, loss_func=loss_func)
+            net = Model(architecture=self.model, hp=hp, loss_func=loss_func)
             
             trainer.fit(net, trainloader)
 
@@ -321,7 +317,7 @@ class MLPipe():
                             log_every_n_steps=1)
     
         self.trainloader, self.testloader = self.hold_out_split(batch_size=hp['batch_size'])
-        self.net = Model(architecture=self.model, dataset=self.dataset, in_channels=self.channels, hp=hp, loss_func=loss_func)
+        self.net = Model(architecture=self.model, hp=hp, loss_func=loss_func)
         
         self.trainer.fit(self.net, self.trainloader)
 
@@ -331,7 +327,7 @@ class MLPipe():
             self.__set_hp_params__(model, max_epochs, batch_size, optimizer, learning_rate, number_trials)
         self.__setup_train_dirs__()
 
-        self.model = eval(self.MODEL_ARCHITECTURE['name'])()
+        self.model = eval(self.MODEL_ARCHITECTURE['name'])(self.channels, self.dataset.get_num_classes())
 
         if self.is_hp:
             ray.shutdown()
