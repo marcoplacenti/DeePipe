@@ -24,7 +24,7 @@ if __name__ == "__main__":
     parser.add_argument("--config", help="Provide path to configuration file")
     args = parser.parse_args()
 
-    #mode_1(args.config)
-    mode_2()
+    mode_1(args.config)
+    #mode_2()
     
     

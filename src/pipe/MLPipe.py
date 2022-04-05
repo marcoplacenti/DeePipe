@@ -28,8 +28,10 @@ import datetime
 import os
 
 from src.data.make_dataset import ImageDataset
-from src.models.model import Net
+from src.models.model import Model
 from src.pipe.AWSConnector import AWSConnector
+
+from src.models.architectures import *
 
 TUNE_ORIG_WORKING_DIR = os.getcwd()
 os.environ['WANDB_SILENT']="true"
@@ -39,6 +41,10 @@ class MLPipe():
 
     def __init__(self, config_file=None, name=None, experiment=None, task=None):
         
+        self.model = VGG(10)
+        self.model = SimpleModel(10)
+
+
         if not config_file:
             self.config_file_flag = False
             assert name
@@ -61,7 +67,7 @@ class MLPipe():
         data = yamale.make_data(config_file)
 
         try:
-            yamale.validate(schema, data)
+            #yamale.validate(schema, data)
             with open(config_file) as infile:
                 config_dict = yaml.load(infile, Loader=yaml.SafeLoader)
 
@@ -79,6 +85,7 @@ class MLPipe():
     def __parse_config_dict__(self, config_dict):
 
         self.DATA = config_dict['data']
+        self.MODEL_ARCHITECTURE = config_dict['model_architecture']
         self.TRAINING_HP = config_dict['training']
         self.OPTIMIZATION = config_dict['optimization']
         self.TUNING = config_dict['tuning']
@@ -115,11 +122,12 @@ class MLPipe():
             self.hp['optimizer'] = optimizer
 
 
-    def __set_hp_params__(self, max_epochs=None, batch_size=None, optimizer=None, learning_rate=None, number_trials=None):
+    def __set_hp_params__(self, model=None, max_epochs=None, batch_size=None, optimizer=None, learning_rate=None, number_trials=None):
         if not self.config_file_flag:
             self.TRAINING_HP = {'max_epochs': max_epochs, 'batch_size': batch_size}
             self.OPTIMIZATION = {'optimizer': optimizer, 'learning_rate': learning_rate}
             self.TUNING = {'number_trials': number_trials}
+            self.MODEL_ARCHITECTURE = {'name': model}
 
         self.__fill_hp_dict(self.TRAINING_HP['max_epochs'], 
                                 self.TRAINING_HP['batch_size'], 
@@ -225,7 +233,7 @@ class MLPipe():
         torch.save(self.trainset, './data/raw/'+self.DATA['location'].split('/')[2]+'/trainset.pt')
         torch.save(self.testset, './data/raw/'+self.DATA['location'].split('/')[2]+'/testset.pt')
 
-        self.upload_artifacts('data', './data/raw/'+self.DATA['location'].split('/')[2])
+        #self.upload_artifacts('data', './data/raw/'+self.DATA['location'].split('/')[2])
 
     def upload_artifacts(self, artifact_type, path):
         session, bucket = self.aws_connector.S3_session()
@@ -271,7 +279,7 @@ class MLPipe():
         
             trainloader, valloader, _ = self.k_fold_split(batch_size=hp['batch_size'])
             for (fold_idx, fold) in enumerate(trainloader):
-                net = Net(dataset=self.dataset, in_channels=self.channels, hp=hp, loss_func=loss_func)
+                net = Model(model=self.model, dataset=self.dataset, in_channels=self.channels, hp=hp, loss_func=loss_func)
 
                 trainer.fit(net, trainloader[fold_idx], valloader[fold_idx])
                     
@@ -291,7 +299,7 @@ class MLPipe():
                             enable_progress_bar=False)
 
             trainloader, _ = self.hold_out_split(batch_size=hp['batch_size'])
-            net = Net(dataset=self.dataset, in_channels=self.channels, hp=hp, loss_func=loss_func)
+            net = Model(architecture=self.model, dataset=self.dataset, in_channels=self.channels, hp=hp, loss_func=loss_func)
             
             trainer.fit(net, trainloader)
 
@@ -313,15 +321,17 @@ class MLPipe():
                             log_every_n_steps=1)
     
         self.trainloader, self.testloader = self.hold_out_split(batch_size=hp['batch_size'])
-        self.net = Net(dataset=self.dataset, in_channels=self.channels, hp=hp, loss_func=loss_func)
+        self.net = Model(architecture=self.model, dataset=self.dataset, in_channels=self.channels, hp=hp, loss_func=loss_func)
         
         self.trainer.fit(self.net, self.trainloader)
 
 
-    def train(self, max_epochs=None, batch_size=None, optimizer=None, learning_rate=None, number_trials=None):
+    def train(self, model=None, max_epochs=None, batch_size=None, optimizer=None, learning_rate=None, number_trials=None):
         if not self.config_file_flag:
-            self.__set_hp_params__(max_epochs, batch_size, optimizer, learning_rate, number_trials)
+            self.__set_hp_params__(model, max_epochs, batch_size, optimizer, learning_rate, number_trials)
         self.__setup_train_dirs__()
+
+        self.model = eval(self.MODEL_ARCHITECTURE['name'])()
 
         if self.is_hp:
             ray.shutdown()
