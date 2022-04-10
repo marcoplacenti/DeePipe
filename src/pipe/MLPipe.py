@@ -20,9 +20,6 @@ from sklearn.model_selection import KFold
 
 import wandb
 
-import yaml
-import yamale
-
 import uuid
 import datetime
 import os
@@ -30,6 +27,7 @@ import os
 from src.data.make_dataset import ImageDataset
 from src.models.model import Model
 from src.pipe.AWSConnector import AWSConnector
+from src.pipe.ConfigValidator import ConfigValidator
 
 from src.models.architectures import *
 
@@ -51,27 +49,11 @@ class MLPipe():
             self.PROJECT['experiment'] = experiment
         else:
             self.config_file_flag = True
-            config_dict = self.__validate_configuration__(config_file)
+            config_dict = ConfigValidator(config_file).get_dict()
             self.__parse_config_dict__(config_dict)
             self.__set_hp_params__()
 
         self.__set_aws_connector__()    
-
-    
-    def __validate_configuration__(self, config_file):
-        schema = yamale.make_schema('./config/schema.yml')
-        data = yamale.make_data(config_file)
-
-        try:
-            #yamale.validate(schema, data)
-            with open(config_file) as infile:
-                config_dict = yaml.load(infile, Loader=yaml.SafeLoader)
-
-            return config_dict
-        except Exception as e:
-            print(e)
-            print("Provided yaml file not acceptable.")
-            exit(1)
 
 
     def __set_aws_connector__(self):
