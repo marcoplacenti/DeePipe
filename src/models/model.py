@@ -7,41 +7,19 @@ from torchvision import transforms
 
 import pytorch_lightning as pl
 
-class Net(pl.LightningModule):
-    def __init__(self, dataset, in_channels, hp, loss_func):
-        super(Net, self).__init__()
+class Model(pl.LightningModule):
+    def __init__(self, architecture, hp, loss_func):
+        super(Model, self).__init__()
 
+        self.optimizer = hp['optimizer']
         self.lr = hp['lr']
-        self.dataset = dataset
-        self.num_classes = self.dataset.get_num_classes()
         self.loss_func = loss_func
 
-        self.conv1 = nn.Conv2d(in_channels=in_channels, out_channels=64, 
-            kernel_size=4, stride=1, padding=2)
-        self.conv2 = nn.Conv2d(in_channels=64, out_channels=32, 
-            kernel_size=4, stride=1, padding=2)
+        self.model = architecture
 
-        self.max_pool2d = nn.MaxPool2d(kernel_size=2, stride=2)
-
-        self.dropout1 = nn.Dropout2d(0.25)
-
-        self.relu = nn.ReLU()
-
-        self.flatten = nn.Flatten(start_dim=1)
-        self.linear = nn.Linear(7200, self.num_classes)
-        self.log_softmax = nn.LogSoftmax(dim=1)
         
     def forward(self, x):
-        x = self.conv1(x)
-        x = self.relu(x)
-        x = self.conv2(x)
-        x = self.relu(x)
-        x = self.max_pool2d(x)
-        x = self.dropout1(x)
-        x = self.flatten(x)
-        x = self.linear(x)
-        x = self.log_softmax(x)
-        return x
+        return self.model(x)
 
     def training_step(self, batch, batch_idx):
         images, labels = batch
@@ -91,6 +69,7 @@ class Net(pl.LightningModule):
         self.log("ptl/test_acc", avg_acc)
 
     def configure_optimizers(self):
-        return torch.optim.Adam(self.parameters(), 
+        if self.optimizer.lower() == 'adam':
+            return torch.optim.Adam(self.parameters(), 
                             lr=self.lr)
 

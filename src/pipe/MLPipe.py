@@ -20,13 +20,18 @@ from sklearn.model_selection import KFold
 
 import wandb
 
+import yaml
+import yamale
+
 import uuid
 import datetime
 import os
 
 from src.data.make_dataset import ImageDataset
-from src.models.model import Net
+from src.models.model import Model
 from src.pipe.AWSConnector import AWSConnector
+
+from src.models.architectures import *
 
 TUNE_ORIG_WORKING_DIR = os.getcwd()
 os.environ['WANDB_SILENT']="true"
@@ -34,12 +39,39 @@ os.environ['WANDB_SILENT']="true"
 
 class MLPipe():
 
-    def __init__(self, config_dict=None):
-        
-        self.__parse_config_dict__(config_dict)
-        self.__set_hp_params__()
-        self.__set_aws_connector__()
-        self.__setup_dirs__()        
+    def __init__(self, config_file=None, name=None, experiment=None, task=None):
+
+        if not config_file:
+            self.config_file_flag = False
+            assert name
+            assert task
+            self.PROJECT = {'name': name, 'task': task}
+            if not experiment:
+                experiment = str(datetime.datetime.now())+'-'+str(uuid.uuid4().hex)
+            self.PROJECT['experiment'] = experiment
+        else:
+            self.config_file_flag = True
+            config_dict = self.__validate_configuration__(config_file)
+            self.__parse_config_dict__(config_dict)
+            self.__set_hp_params__()
+
+        self.__set_aws_connector__()    
+
+    
+    def __validate_configuration__(self, config_file):
+        schema = yamale.make_schema('./config/schema.yml')
+        data = yamale.make_data(config_file)
+
+        try:
+            #yamale.validate(schema, data)
+            with open(config_file) as infile:
+                config_dict = yaml.load(infile, Loader=yaml.SafeLoader)
+
+            return config_dict
+        except Exception as e:
+            print(e)
+            print("Provided yaml file not acceptable.")
+            exit(1)
 
 
     def __set_aws_connector__(self):
@@ -49,8 +81,9 @@ class MLPipe():
     def __parse_config_dict__(self, config_dict):
 
         self.DATA = config_dict['data']
+        self.MODEL_ARCHITECTURE = config_dict['model_architecture']
         self.TRAINING_HP = config_dict['training']
-        self.OPTIMIZER = config_dict['optimizer']
+        self.OPTIMIZATION = config_dict['optimization']
         self.TUNING = config_dict['tuning']
         self.PROJECT = config_dict['project']
         self.VALIDATION = config_dict['validation']
@@ -62,25 +95,43 @@ class MLPipe():
 
         self.channels = (1 if self.DATA['greyscale'] else 3)
 
-
-    def __set_hp_params__(self):
+    def __fill_hp_dict(self, max_epochs, batch_size, optimizer, learning_rate):
         self.is_hp = False
-        self.hp = {'max_epochs': self.TRAINING_HP['max_epochs']}
+        self.hp = {'max_epochs': max_epochs}
 
-        if isinstance(self.TRAINING_HP['batch_size'], list):
-            self.hp['batch_size'] = tune.choice(self.TRAINING_HP['batch_size'])
+        if isinstance(batch_size, list):
+            self.hp['batch_size'] = tune.choice(batch_size)
             self.is_hp = True
         else:
-            self.hp['batch_size'] = self.TRAINING_HP['batch_size']
+            self.hp['batch_size'] = batch_size
 
-        if isinstance(self.OPTIMIZER['learning_rate'], list):
-            self.hp['lr'] = tune.loguniform(self.OPTIMIZER['learning_rate'][0], self.OPTIMIZER['learning_rate'][1])
+        if isinstance(learning_rate, list):
+            self.hp['lr'] = tune.loguniform(learning_rate[0], learning_rate[1])
             self.is_hp = True
         else:
-            self.hp['lr'] = self.OPTIMIZER['learning_rate']
+            self.hp['lr'] = learning_rate
+
+        if isinstance(optimizer, list):
+            self.hp['optimizer'] = tune.choice(optimizer)
+            self.is_hp = True
+        else:
+            self.hp['optimizer'] = optimizer
 
 
-    def __setup_dirs__(self):
+    def __set_hp_params__(self, model=None, max_epochs=None, batch_size=None, optimizer=None, learning_rate=None, loss_function=None, number_trials=None):
+        if not self.config_file_flag:
+            self.TRAINING_HP = {'max_epochs': max_epochs, 'batch_size': batch_size}
+            self.OPTIMIZATION = {'optimizer': optimizer, 'learning_rate': learning_rate, 'loss_fnc': loss_function}
+            self.TUNING = {'number_trials': number_trials}
+            self.MODEL_ARCHITECTURE = {'name': model}
+
+        self.__fill_hp_dict(self.TRAINING_HP['max_epochs'], 
+                                self.TRAINING_HP['batch_size'], 
+                                self.OPTIMIZATION['optimizer'], 
+                                self.OPTIMIZATION['learning_rate'])
+
+
+    def __setup_data_dirs__(self):
         if not os.path.exists('./data'):
             os.makedirs('./data')
         if not os.path.exists('./data/raw'):
@@ -88,6 +139,8 @@ class MLPipe():
         if not os.path.exists('./data/raw/'+self.DATA['location'].split('/')[2]):
             os.makedirs('./data/raw/'+self.DATA['location'].split('/')[2])
 
+
+    def __setup_train_dirs__(self):
         if not os.path.exists('./trials'):
             os.makedirs('./trials')
         if not os.path.exists('./trials/'+self.PROJECT['experiment']):
@@ -131,7 +184,18 @@ class MLPipe():
         return trainloader_list, valloader_list, testloader
 
 
-    def preproc_data(self):        
+    def __set_data_params__(self, location, img_res, greyscale, test_size, folds):
+        self.DATA = {'location': location, 'img-res': img_res, 'greyscale': greyscale}
+        self.VALIDATION = {'test_size': test_size, 'folds': folds}
+
+        self.channels = (1 if self.DATA['greyscale'] else 3)
+
+    def preproc_data(self, location=None, img_res=None, greyscale=None, test_size=None, folds=None):
+        if not self.config_file_flag:
+            self.__set_data_params__(location, img_res, greyscale, test_size, folds)
+
+        self.__setup_data_dirs__()
+
         transform = transforms.Resize((
                         self.DATA['img-res'][0], 
                         self.DATA['img-res'][1]))
@@ -194,7 +258,7 @@ class MLPipe():
 
         os.chdir(TUNE_ORIG_WORKING_DIR)
 
-        loss_func = nn.NLLLoss()
+        loss_func = eval('nn.'+self.OPTIMIZATION['loss_fnc'])()
 
         if self.VALIDATION['folds']:
 
@@ -211,7 +275,7 @@ class MLPipe():
         
             trainloader, valloader, _ = self.k_fold_split(batch_size=hp['batch_size'])
             for (fold_idx, fold) in enumerate(trainloader):
-                net = Net(dataset=self.dataset, in_channels=self.channels, hp=hp, loss_func=loss_func)
+                net = Model(model=self.model, hp=hp, loss_func=loss_func)
 
                 trainer.fit(net, trainloader[fold_idx], valloader[fold_idx])
                     
@@ -231,7 +295,7 @@ class MLPipe():
                             enable_progress_bar=False)
 
             trainloader, _ = self.hold_out_split(batch_size=hp['batch_size'])
-            net = Net(dataset=self.dataset, in_channels=self.channels, hp=hp, loss_func=loss_func)
+            net = Model(architecture=self.model, hp=hp, loss_func=loss_func)
             
             trainer.fit(net, trainloader)
 
@@ -239,7 +303,7 @@ class MLPipe():
     def train_opt(self, hp):
 
         wandb_logger = WandbLogger(project=self.PROJECT['name'], name=self.PROJECT['experiment'])
-        loss_func = nn.NLLLoss()
+        loss_func = eval('nn.'+self.OPTIMIZATION['loss_fnc'])()
 
         callbacks = [
             ModelCheckpoint(dirpath="./models/", monitor='ptl/loss', save_top_k=3, save_last=True),
@@ -253,14 +317,21 @@ class MLPipe():
                             log_every_n_steps=1)
     
         self.trainloader, self.testloader = self.hold_out_split(batch_size=hp['batch_size'])
-        self.net = Net(dataset=self.dataset, in_channels=self.channels, hp=hp, loss_func=loss_func)
+        self.net = Model(architecture=self.model, hp=hp, loss_func=loss_func)
         
         self.trainer.fit(self.net, self.trainloader)
 
 
-    def train(self):
-        if self.is_hp:
+    def train(self, model=None, max_epochs=None, batch_size=None, optimizer=None, learning_rate=None, number_trials=None):
+        if not self.config_file_flag:
+            self.__set_hp_params__(model, max_epochs, batch_size, optimizer, learning_rate, number_trials)
+        self.__setup_train_dirs__()
 
+        self.model = eval(self.MODEL_ARCHITECTURE['name'])(self.channels, self.dataset.get_num_classes())
+
+        if self.is_hp:
+            print("Running HP tuner...")
+            ray.shutdown()
             ray.init(log_to_driver=False)
             trainable = tune.with_parameters(self.train_trial, checkpoint_dir=None)
 
@@ -298,7 +369,7 @@ class MLPipe():
             final_config = analysis.best_config
             
             self.train_opt(final_config)
-
+            
         else:
             self.train_opt(self.hp)
 

@@ -1,19 +1,24 @@
 project:
   name: str()
   task: str()
+  experiment: str(required=False)
 
 data:
   location: str()
   img-res: list(int(min=1), int(min=1))
   greyscale: bool()
 
+model_architecture:
+  name: str()
+
 training:
   max_epochs: int(min=1)
   batch_size: list(int(min=1), int(min=2))
 
-optimizer:
-  algorithm: enum('Adam', 'SGD')
+optimization:
+  optimizer: enum('Adam', 'SGD')
   learning_rate: list(num(), num())
+  loss_fnc: enum('NLLLoss')
 
 tuning:
   number_trials: int(required=False)
@@ -21,5 +26,3 @@ tuning:
 validation:
   test_size: num()
   folds: int()
-
-
