@@ -118,10 +118,10 @@ class MLPipe():
             self.hp['optimizer'] = optimizer
 
 
-    def __set_hp_params__(self, model=None, max_epochs=None, batch_size=None, optimizer=None, learning_rate=None, number_trials=None):
+    def __set_hp_params__(self, model=None, max_epochs=None, batch_size=None, optimizer=None, learning_rate=None, loss_function=None, number_trials=None):
         if not self.config_file_flag:
             self.TRAINING_HP = {'max_epochs': max_epochs, 'batch_size': batch_size}
-            self.OPTIMIZATION = {'optimizer': optimizer, 'learning_rate': learning_rate}
+            self.OPTIMIZATION = {'optimizer': optimizer, 'learning_rate': learning_rate, 'loss_fnc': loss_function}
             self.TUNING = {'number_trials': number_trials}
             self.MODEL_ARCHITECTURE = {'name': model}
 
@@ -258,7 +258,7 @@ class MLPipe():
 
         os.chdir(TUNE_ORIG_WORKING_DIR)
 
-        loss_func = nn.NLLLoss()
+        loss_func = eval('nn.'+self.OPTIMIZATION['loss_fnc'])()
 
         if self.VALIDATION['folds']:
 
@@ -303,7 +303,7 @@ class MLPipe():
     def train_opt(self, hp):
 
         wandb_logger = WandbLogger(project=self.PROJECT['name'], name=self.PROJECT['experiment'])
-        loss_func = nn.NLLLoss()
+        loss_func = eval('nn.'+self.OPTIMIZATION['loss_fnc'])()
 
         callbacks = [
             ModelCheckpoint(dirpath="./models/", monitor='ptl/loss', save_top_k=3, save_last=True),
@@ -330,6 +330,7 @@ class MLPipe():
         self.model = eval(self.MODEL_ARCHITECTURE['name'])(self.channels, self.dataset.get_num_classes())
 
         if self.is_hp:
+            print("Running HP tuner...")
             ray.shutdown()
             ray.init(log_to_driver=False)
             trainable = tune.with_parameters(self.train_trial, checkpoint_dir=None)

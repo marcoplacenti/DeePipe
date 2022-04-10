@@ -18,6 +18,7 @@ training:
 optimization:
   optimizer: enum('Adam', 'SGD')
   learning_rate: list(num(), num())
+  loss_fnc: enum('NLLLoss')
 
 tuning:
   number_trials: int(required=False)

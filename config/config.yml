@@ -17,6 +17,7 @@ training:
 optimization:
   optimizer: Adam
   learning_rate: 0.001
+  loss_fnc: NLLLoss
 
 tuning:
   number_trials: 3
