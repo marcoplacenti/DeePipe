@@ -253,7 +253,7 @@ class AWSConnector:
         with tarfile.open('myModel.tar.gz', "w:gz") as tar:
             tar.add('./tmp/models/final.pth', arcname=os.path.basename('./tmp/models/final.pth'))
 
-        
+        #TODO: create bucket manually and test this to ensure it works
         session, role = self.get_sagemaker_role()
         
         sess = Session(boto_session=session, default_bucket=self.sagemaker_bucket_name)
