@@ -8,15 +8,16 @@ from torchvision import transforms
 import pytorch_lightning as pl
 
 class Model(pl.LightningModule):
-    def __init__(self, architecture, hp, loss_func):
+    def __init__(self):
         super(Model, self).__init__()
 
-        self.optimizer = hp['optimizer']
-        self.lr = hp['lr']
-        self.loss_func = loss_func
-
+    def set_architecture(self, architecture):
         self.model = architecture
 
+    def set_hyperparameters(self, optimizer, lr, loss_func):
+        self.optimizer = optimizer
+        self.lr = lr
+        self.loss_func = loss_func
         
     def forward(self, x):
         return self.model(x)

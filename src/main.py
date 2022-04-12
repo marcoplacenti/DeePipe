@@ -6,9 +6,10 @@ def mode_1(config_dict):
     ### OPTION 1 ###
     print("Option 1")
     pipe = MLPipe(config_dict)
-    pipe.preproc_data()
-    pipe.train()
-    pipe.eval()
+    #pipe.preproc_data()
+    #pipe.train()
+    #pipe.eval()
+    pipe.deploy()
 
 def mode_2():
     ### OPTION 2 ###

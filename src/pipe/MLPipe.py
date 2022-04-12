@@ -9,6 +9,7 @@ from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.callbacks.early_stopping import EarlyStopping
 from pytorch_lightning.loggers import WandbLogger
 
+
 from ray.tune.integration.pytorch_lightning import TuneReportCallback
 from ray.tune.integration.wandb import WandbLoggerCallback
 from ray.tune.schedulers import ASHAScheduler
@@ -58,7 +59,8 @@ class MLPipe():
 
     def __set_aws_connector__(self):
         self.aws_connector = AWSConnector(self.PROJECT['name'])
-
+        #self.aws_connector.download_data('something', 'something')
+        #exit()
 
     def __parse_config_dict__(self, config_dict):
 
@@ -211,29 +213,7 @@ class MLPipe():
         torch.save(self.trainset, './data/raw/'+self.DATA['location'].split('/')[2]+'/trainset.pt')
         torch.save(self.testset, './data/raw/'+self.DATA['location'].split('/')[2]+'/testset.pt')
 
-        self.upload_artifacts('data', './data/raw/'+self.DATA['location'].split('/')[2])
-
-    def upload_artifacts(self, artifact_type, path):
-        session, bucket = self.aws_connector.S3_session()
-        s3_client = session.client('s3')
-
-        run = wandb.init(project=self.PROJECT['name'], name=self.PROJECT['experiment'], entity='dma')
-
-        for root, _, files in os.walk(path):
-            for obj in files:
-                if artifact_type == 'data':
-                    obj_name = self.PROJECT['name']+'/'+artifact_type+'/'+obj
-                elif artifact_type == 'trials':
-                    obj_name = self.PROJECT['name']+'/'+artifact_type+'/'+'/'.join(root.split('/')[2:])+'/'+obj
-                s3_client.upload_file(os.path.join(root, obj), bucket, obj_name)
-
-                artifact = wandb.Artifact(obj, type=artifact_type)
-                artifact.add_reference('s3://'+bucket+'/'+obj_name)
-                run.log_artifact(artifact)
-
-        del s3_client
-        del session
-        wandb.finish()
+        self.aws_connector.upload_artifacts('data', './data/raw/'+self.DATA['location'].split('/')[2], self.PROJECT)
 
 
     def train_trial(self, hp, checkpoint_dir=None):
@@ -257,7 +237,9 @@ class MLPipe():
         
             trainloader, valloader, _ = self.k_fold_split(batch_size=hp['batch_size'])
             for (fold_idx, fold) in enumerate(trainloader):
-                net = Model(model=self.model, hp=hp, loss_func=loss_func)
+                net = Model()
+                net.set_architecture(self.model)
+                net.set_hyperparameters(hp['optimizer'], hp['lr'], loss_func)
 
                 trainer.fit(net, trainloader[fold_idx], valloader[fold_idx])
                     
@@ -277,7 +259,9 @@ class MLPipe():
                             enable_progress_bar=False)
 
             trainloader, _ = self.hold_out_split(batch_size=hp['batch_size'])
-            net = Model(architecture=self.model, hp=hp, loss_func=loss_func)
+            net = Model()
+            net.set_architecture(self.model)
+            net.set_hyperparameters(hp['optimizer'], hp['lr'], loss_func)
             
             trainer.fit(net, trainloader)
 
@@ -287,11 +271,18 @@ class MLPipe():
         wandb_logger = WandbLogger(project=self.PROJECT['name'], name=self.PROJECT['experiment'])
         loss_func = eval('nn.'+self.OPTIMIZATION['loss_fnc'])()
 
+        checkpoint_callback = ModelCheckpoint(dirpath="./tmp/models/checkpoints", 
+                                filename='{epoch}-{loss:.2f}', 
+                                monitor='ptl/loss', 
+                                save_top_k=3, 
+                                save_last=True)
+        checkpoint_callback.FILE_EXTENSION = '.pth'
+
         callbacks = [
-            ModelCheckpoint(dirpath="./models/", monitor='ptl/loss', save_top_k=3, save_last=True),
+            checkpoint_callback,
             EarlyStopping(monitor="ptl/loss")
         ]
-        
+
         self.trainer = Trainer(fast_dev_run=False, 
                             max_epochs=hp['max_epochs'],
                             logger=wandb_logger,
@@ -299,10 +290,14 @@ class MLPipe():
                             log_every_n_steps=1)
     
         self.trainloader, self.testloader = self.hold_out_split(batch_size=hp['batch_size'])
-        self.net = Model(architecture=self.model, hp=hp, loss_func=loss_func)
+        self.net = Model()
+        self.net.set_architecture(self.model)
+        self.net.set_hyperparameters(hp['optimizer'], hp['lr'], loss_func)
         
         self.trainer.fit(self.net, self.trainloader)
 
+        model_scripted = self.net.to_torchscript()#torch.jit.script(self.net) # Export to TorchScript
+        torch.jit.save(model_scripted, './tmp/models/final.pth') # Save
 
     def train(self, model=None, max_epochs=None, batch_size=None, optimizer=None, learning_rate=None, number_trials=None):
         if not self.config_file_flag:
@@ -346,7 +341,7 @@ class MLPipe():
                 name=self.PROJECT['experiment'],
                 verbose=0)
 
-            self.upload_artifacts('trials', './trials/'+self.PROJECT['experiment'])
+            self.aws_connector.upload_artifacts('trials', './trials/'+self.PROJECT['experiment'], self.PROJECT)
 
             final_config = analysis.best_config
             
@@ -354,6 +349,14 @@ class MLPipe():
             
         else:
             self.train_opt(self.hp)
+
+        model_checkpoints = os.listdir('./tmp/models/checkpoints')
+        for ckpt in model_checkpoints:
+            if '=' in ckpt:
+                os.rename('./tmp/models/checkpoints/'+ckpt, './tmp/models/checkpoints/'+ckpt.replace('=', '_'))
+        self.aws_connector.upload_artifacts('models', './tmp/models/checkpoints', self.PROJECT)
+
+        self.aws_connector.upload_artifacts('models', './tmp/models/final/', self.PROJECT)
 
 
     def eval(self):
@@ -363,3 +366,6 @@ class MLPipe():
             #wandb.log({"Accuracy Test Set": (100*correct/total).item()})
         else:
             print('Test set is empty. Step skipped.')
+
+    def deploy(self):
+        self.aws_connector.deploy()

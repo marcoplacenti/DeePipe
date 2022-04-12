@@ -1,10 +1,5 @@
 #!/bin/bash
 
-# upgrade pip and pillow
-pip install --upgrade pip
+docker build -t deepipe .
 
-# install required python packages
-pip install -r requirements.txt
-
-# run the code
-python3 src/main.py --config config/config.yml
+docker run -rm deepipe --config config/config.yml 

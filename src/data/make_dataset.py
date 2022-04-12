@@ -53,6 +53,3 @@ class ImageDataset(Dataset):
     def get_num_classes(self):
         return len(set(self.image_labels['label']))
 
-    
-
-
