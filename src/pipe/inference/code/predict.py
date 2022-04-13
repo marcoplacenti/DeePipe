@@ -1,11 +1,8 @@
-from src.models.architectures import SimpleModel
-from src.models.model import Model
-
 import torch
 
 
 def model_fn(model_dir):
-    model = torch.jit.load('./tmp/models/final.ts')
+    model = torch.jit.load('./final.pth')
     model.eval()
     return model
     

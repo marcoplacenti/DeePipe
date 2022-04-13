@@ -21,8 +21,9 @@ class AWSConnector:
         self.sagemaker_bucket_name = 'mopc-s202798-mlpipe-sagemaker'
 
     def get_contrib_session(self):
-        return boto3.session.Session(aws_access_key_id=os.environ['CLOUD_DEVOPS_USER_ACCESS_KEY_ID'],
-                                    aws_secret_access_key=os.environ['CLOUD_DEVOPS_USER_SECRET_ACCESS_KEY'])
+        return boto3.session.Session(
+                aws_access_key_id=os.environ['CLOUD_DEVOPS_USER_ACCESS_KEY_ID'],
+                aws_secret_access_key=os.environ['CLOUD_DEVOPS_USER_SECRET_ACCESS_KEY'])
 
     def S3_session(self):
         self.contrib_session = self.get_contrib_session()
@@ -30,7 +31,9 @@ class AWSConnector:
 
         iam_client = self.contrib_session.client('iam')
         self.__create_or_get_role__(iam_client, role_name)
-        self.put_role_policy(iam_client, role_name, 'AllowS3-MLPipe', self.__get_s3_policy_document__())
+        self.put_role_policy(iam_client, role_name, 
+                            'AllowS3-MLPipe', 
+                            self.__get_s3_policy_document__())
 
         sts_client = self.contrib_session.client('sts')
             
@@ -60,15 +63,20 @@ class AWSConnector:
     def get_sagemaker_role(self):
         self.contrib_session = self.get_contrib_session()
 
-        role_name = 'mopc-s202798-'+self.project_name+'-sagemaker'
+        role_name = 'mopc-s202798-'+self.project_name+'-Sagemaker'
+        #role_name = 'AmazonSageMaker-ExecutionRole-20210119T155723'
+        #role_name = 'sagemaker-execution-role'
 
         iam_client = self.contrib_session.client('iam')
         self.__create_or_get_role__(iam_client, role_name)
-        self.put_role_policy(iam_client, role_name, 'AllowSageMaker-MLPipe', self.__get_sagemaker_policy_document__())
+        response = iam_client.attach_role_policy(
+            RoleName=role_name, PolicyArn='arn:aws:iam::aws:policy/AmazonSageMakerFullAccess')
+
+        self.put_role_policy(iam_client, role_name, 
+                            'AllowSagemaker-MLPipe', 
+                            self.__get_sagemaker_policy_document__())
 
         sts_client = self.contrib_session.client('sts')
-        account_id = sts_client.get_caller_identity()["Account"]
-        print(account_id)
 
         role = self.__assume_role__(role_name)
         
@@ -82,9 +90,10 @@ class AWSConnector:
         secret_access_key = response['Credentials']['SecretAccessKey']
         session_token = response['Credentials']['SessionToken']
 
-        role_session = boto3.session.Session(aws_access_key_id=access_key_id, 
-                    aws_secret_access_key=secret_access_key, 
-                    aws_session_token=session_token)
+        role_session = boto3.session.Session(
+                            aws_access_key_id=access_key_id, 
+                            aws_secret_access_key=secret_access_key, 
+                            aws_session_token=session_token)
 
         del self.contrib_session
         return role_session, role_name
@@ -100,6 +109,9 @@ class AWSConnector:
         except Exception as e:
             if e.response['Error']['Code'] == 'EntityAlreadyExists':
                 pass
+            else:
+                print(e)
+                exit()
 
     def put_role_policy(self, iam_client, role_name, policy_name, policy_document):
         iam_client.put_role_policy(
@@ -139,18 +151,13 @@ class AWSConnector:
             'Statement': [
                 {
                     'Action': [
+                        'sagemaker:*', 's3:*',
                         'sagemaker:PutObject', 'sagemaker:PutObjectAcl',
                         'sagemaker:GetObject', 'sagemaker:GetObjectAcl',
-                        'sagemaker:DeleteObject'],
+                        'sagemaker:DeleteObject', 'sagemaker:ListBucket',
+                        'sagemaker:HeadObject', 's3:HeadObject'],
                     'Resource': [
-                        'arn:aws:s3:::'+self.sagemaker_bucket_name+'/model/pytorch/*',
-                        'arn:aws:s3:::'+self.sagemaker_bucket_name],
-                    'Effect': 'Allow'
-                },
-                {
-                    'Action': [
-                        'sagemaker:ListBucket'],
-                    'Resource': [
+                        'arn:aws:s3:::'+self.sagemaker_bucket_name+'/*',
                         'arn:aws:s3:::'+self.sagemaker_bucket_name],
                     'Effect': 'Allow'
                 }]
@@ -185,16 +192,19 @@ class AWSConnector:
 
         for root, _, files in os.walk(path):
             for obj in files:
+                obj_name = project['name']+'/'+artifact_type+'/'
                 if artifact_type == 'data':
-                    obj_name = project['name']+'/'+artifact_type+'/'+obj
+                    obj_name = obj_name + obj
                 elif artifact_type == 'trials':
-                    obj_name = project['name']+'/'+artifact_type+'/'+'/'.join(root.split('/')[2:])+'/'+obj
+                    obj_name = obj_name + '/'.join(root.split('/')[2:])+'/'+obj
                 elif artifact_type == 'models':
-                    obj_name = project['name']+'/'+artifact_type+'/'+obj
+                    obj_name = obj_name + obj
                 else:
                     raise ValueError
 
-                s3_client.upload_file(os.path.join(root, obj), self.metastore_bucket_name, obj_name)
+                s3_client.upload_file(os.path.join(root, obj), 
+                                    self.metastore_bucket_name, 
+                                    obj_name)
 
                 artifact = wandb.Artifact(obj, type=artifact_type)
                 artifact.add_reference('s3://'+self.metastore_bucket_name+'/'+obj_name)
@@ -250,36 +260,51 @@ class AWSConnector:
             client.download_file(bucket, k, dest_pathname)
 
     def deploy(self):
-        with tarfile.open('myModel.tar.gz', "w:gz") as tar:
-            tar.add('./tmp/models/final.pth', arcname=os.path.basename('./tmp/models/final.pth'))
+        with tarfile.open('./tmp/models/myModel.tar.gz', "w:gz") as tar:
+            tar.add('./tmp/models/final.pth', arcname='./final.pth')
+            tar.add('./src/pipe/inference/code/', arcname='./code/')
 
         #TODO: create bucket manually and test this to ensure it works
         session, role = self.get_sagemaker_role()
         
-        sess = Session(boto_session=session, default_bucket=self.sagemaker_bucket_name)
+        self.contrib_session = self.get_contrib_session()
+        role = self.__assume_role__(role)
+        role = role['Role']['Arn']
+        print("Role: ", role)
 
-        sts_client = session.client('sts')
-        account_id = sts_client.get_caller_identity()["Account"]
-        print(account_id)
+        
+        sess = Session(boto_session=session)
 
-        model_data = sess.upload_data('myModel.tar.gz', bucket=self.sagemaker_bucket_name, key_prefix='model/pytorch')
+        model_data = sess.upload_data('./tmp/models/myModel.tar.gz', 
+                                bucket=self.sagemaker_bucket_name, 
+                                key_prefix='model/pytorch')
 
-        print(model_data)
+        print("tar.gz file: ", model_data)
 
+        from sagemaker.pytorch.model import PyTorchPredictor
         model = PyTorchModel(
             entry_point='predict.py',
-            source_dir='src/pipe',
+            #source_dir='./code',
             role=role,
             model_data=model_data,
             framework_version="1.5.0",
-            py_version='py3',
+            py_version='py3'
         )
 
         from sagemaker.serializers import JSONSerializer
         from sagemaker.deserializers import JSONDeserializer
         predictor = model.deploy(
             initial_instance_count=1,
-            instance_type="ml.c4.xlarge",
+            instance_type="local",#"ml.c4.xlarge",
             serializer=JSONSerializer(),
-            deserializer=JSONDeserializer(),
+            deserializer=JSONDeserializer()
         )
+
+        print("Endpoint name: ", predictor.endpoint_name)
+
+        import random
+        import numpy as np
+
+        dummy_data = {"inputs": np.random.rand(16, 1, 28, 28).tolist()}
+        res = predictor.predict(dummy_data)
+        print("Predictions:", res)
