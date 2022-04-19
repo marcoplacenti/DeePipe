@@ -21,8 +21,6 @@ class AWSConnector:
         self.sagemaker_bucket_name = 'mopc-s202798-mlpipe-sagemaker'
 
     def get_contrib_session(self):
-        os.environ['CLOUD_DEVOPS_USER_ACCESS_KEY_ID'] = 'AKIA26GU74QODZQXQGR6'
-        os.environ['CLOUD_DEVOPS_USER_SECRET_ACCESS_KEY'] = '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'
         return boto3.session.Session(
                 aws_access_key_id=os.environ['CLOUD_DEVOPS_USER_ACCESS_KEY_ID'],
                 aws_secret_access_key=os.environ['CLOUD_DEVOPS_USER_SECRET_ACCESS_KEY'],
