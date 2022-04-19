@@ -74,3 +74,13 @@ class Model(pl.LightningModule):
             return torch.optim.Adam(self.parameters(), 
                             lr=self.lr)
 
+    def predict_step(self, batch, batch_idx):
+        # enable Monte Carlo Dropout
+        self.dropout = nn.Dropout()
+        self.dropout.train()
+
+        # take average of `self.mc_iteration` iterations
+        preds = []
+        preds = [self.model(item) for item in batch]
+        return preds
+        

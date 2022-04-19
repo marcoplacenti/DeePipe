@@ -96,7 +96,7 @@ class AWSConnector:
                             aws_session_token=session_token)
 
         del self.contrib_session
-        return role_session, role_name
+        return role_session, role
 
 
     def __create_or_get_role__(self, iam_client, role_name):
@@ -158,6 +158,7 @@ class AWSConnector:
                         'sagemaker:HeadObject', 's3:HeadObject'],
                     'Resource': [
                         'arn:aws:s3:::'+self.sagemaker_bucket_name+'/*',
+                        'arn:aws:s3:::'+self.sagemaker_bucket_name+'/',
                         'arn:aws:s3:::'+self.sagemaker_bucket_name],
                     'Effect': 'Allow'
                 }]
@@ -171,7 +172,9 @@ class AWSConnector:
             'Version': '2012-10-17',
             'Statement': [{
                 'Effect': 'Allow',
-                'Principal': {'AWS': 'arn:aws:iam::752065963036:root'},
+                'Principal': {
+                    'AWS': 'arn:aws:iam::752065963036:root',
+                    'Service': 'sagemaker.amazonaws.com'},
                 'Action': 'sts:AssumeRole',
                 'Condition': {}
                 }]
@@ -261,43 +264,48 @@ class AWSConnector:
 
     def deploy(self):
         with tarfile.open('./tmp/models/myModel.tar.gz', "w:gz") as tar:
-            tar.add('./tmp/models/final.pth', arcname='./final.pth')
-            tar.add('./src/pipe/inference/code/', arcname='./code/')
+            #tar.add('./tmp/models/final.pth', arcname='./final.pth')
+            tar.add('./src/pipe/inference/', arcname='.')
+            tar.add('./src/models/', arcname='./src/models/')
 
         #TODO: create bucket manually and test this to ensure it works
         session, role = self.get_sagemaker_role()
         
-        self.contrib_session = self.get_contrib_session()
-        role = self.__assume_role__(role)
-        role = role['Role']['Arn']
-        print("Role: ", role)
+        #self.contrib_session = self.get_contrib_session()
+        #role = self.__assume_role__(role)
+        #role = role['Role']['Arn']
+        print("Role: ", role['Role']['Arn'])
 
         
-        sess = Session(boto_session=session)
+        sess = Session(boto_session=session, default_bucket=self.sagemaker_bucket_name)
 
         model_data = sess.upload_data('./tmp/models/myModel.tar.gz', 
-                                bucket=self.sagemaker_bucket_name, 
+                                bucket=self.sagemaker_bucket_name,
                                 key_prefix='model/pytorch')
 
         print("tar.gz file: ", model_data)
 
         from sagemaker.pytorch.model import PyTorchPredictor
         model = PyTorchModel(
-            entry_point='predict.py',
-            #source_dir='./code',
-            role=role,
+            entry_point='inference.py',
+            #source_dir='./src/pipe/inference/code/',
+            role=role['Role']['Arn'],
+            sagemaker_session=sess,
             model_data=model_data,
             framework_version="1.5.0",
-            py_version='py3'
+            py_version='py3',
+            predictor_cls=PyTorchPredictor,
         )
 
         from sagemaker.serializers import JSONSerializer
         from sagemaker.deserializers import JSONDeserializer
         predictor = model.deploy(
+            instance_type='ml.m4.xlarge',
             initial_instance_count=1,
-            instance_type="local",#"ml.c4.xlarge",
-            serializer=JSONSerializer(),
-            deserializer=JSONDeserializer()
+            #endpoint_name='mopc-ImageClassification',
+            #accelerator_type='ml.eia2.medium'
+            #serializer=JSONSerializer(),
+            #deserializer=JSONDeserializer()
         )
 
         print("Endpoint name: ", predictor.endpoint_name)
@@ -306,5 +314,6 @@ class AWSConnector:
         import numpy as np
 
         dummy_data = {"inputs": np.random.rand(16, 1, 28, 28).tolist()}
+        
         res = predictor.predict(dummy_data)
         print("Predictions:", res)
