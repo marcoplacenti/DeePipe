@@ -21,9 +21,12 @@ class AWSConnector:
         self.sagemaker_bucket_name = 'mopc-s202798-mlpipe-sagemaker'
 
     def get_contrib_session(self):
+        os.environ['CLOUD_DEVOPS_USER_ACCESS_KEY_ID'] = 'AKIA26GU74QODZQXQGR6'
+        os.environ['CLOUD_DEVOPS_USER_SECRET_ACCESS_KEY'] = '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'
         return boto3.session.Session(
                 aws_access_key_id=os.environ['CLOUD_DEVOPS_USER_ACCESS_KEY_ID'],
-                aws_secret_access_key=os.environ['CLOUD_DEVOPS_USER_SECRET_ACCESS_KEY'])
+                aws_secret_access_key=os.environ['CLOUD_DEVOPS_USER_SECRET_ACCESS_KEY'],
+                region_name='eu-central-1')
 
     def S3_session(self):
         self.contrib_session = self.get_contrib_session()
@@ -55,7 +58,8 @@ class AWSConnector:
 
         role_session = boto3.session.Session(aws_access_key_id=access_key_id, 
                     aws_secret_access_key=secret_access_key, 
-                    aws_session_token=session_token)
+                    aws_session_token=session_token,
+                    region_name='eu-central-1')
 
         del self.contrib_session
         return role_session
@@ -93,7 +97,8 @@ class AWSConnector:
         role_session = boto3.session.Session(
                             aws_access_key_id=access_key_id, 
                             aws_secret_access_key=secret_access_key, 
-                            aws_session_token=session_token)
+                            aws_session_token=session_token,
+                            region_name='eu-central-1')
 
         del self.contrib_session
         return role_session, role
@@ -268,7 +273,6 @@ class AWSConnector:
             tar.add('./src/pipe/inference/', arcname='.')
             tar.add('./src/models/', arcname='./src/models/')
 
-        #TODO: create bucket manually and test this to ensure it works
         session, role = self.get_sagemaker_role()
         
         #self.contrib_session = self.get_contrib_session()
@@ -304,8 +308,8 @@ class AWSConnector:
             initial_instance_count=1,
             #endpoint_name='mopc-ImageClassification',
             #accelerator_type='ml.eia2.medium'
-            #serializer=JSONSerializer(),
-            #deserializer=JSONDeserializer()
+            serializer=JSONSerializer(),
+            deserializer=JSONDeserializer()
         )
 
         print("Endpoint name: ", predictor.endpoint_name)

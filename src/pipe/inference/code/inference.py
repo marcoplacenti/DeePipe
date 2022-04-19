@@ -10,8 +10,6 @@ import os
 
 def model_fn(model_dir):
     print("LOADING MODEL")
-    print(model_dir+'/final.pth')
-    print(os.listdir(model_dir))
     with open(os.path.join(model_dir, 'final.pth'), 'rb') as f:
         model = torch.jit.load(f)
     model.eval()
@@ -19,6 +17,10 @@ def model_fn(model_dir):
     
 def input_fn(request_body, request_content_type):
     assert request_content_type=='application/json'
+    print(request_body)
+    request_body = json.loads(request_body)
+    print(request_body)
+    print(type(request_body))
     data = request_body['inputs']
     data = torch.tensor(data, dtype=torch.float32)
     return data
@@ -33,7 +35,7 @@ def output_fn(predictions, content_type):
     res = predictions.cpu().numpy().tolist()
     return json.dumps(res)
 
-
+"""
 model = model_fn('./src/pipe/inference/')
 import numpy as np
 import cv2
@@ -52,3 +54,4 @@ dummy_data = {"inputs": image.tolist()}
 input_object = input_fn(dummy_data, 'application/json')
 preds = predict_fn(input_object, model)
 print(np.argmax(np.exp(preds)))
+"""
