@@ -1,15 +1,10 @@
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
-from torchvision import transforms
-
-import pytorch_lightning as pl
 
 import json
 import os
+import numpy as np
 
 def model_fn(model_dir):
-    print("LOADING MODEL")
     with open(os.path.join(model_dir, 'final.pth'), 'rb') as f:
         model = torch.jit.load(f)
     model.eval()
@@ -17,10 +12,7 @@ def model_fn(model_dir):
     
 def input_fn(request_body, request_content_type):
     assert request_content_type=='application/json'
-    print(request_body)
     request_body = json.loads(request_body)
-    print(request_body)
-    print(type(request_body))
     data = request_body['inputs']
     data = torch.tensor(data, dtype=torch.float32)
     return data
@@ -32,26 +24,18 @@ def predict_fn(input_object, model):
 
 def output_fn(predictions, content_type):
     assert content_type == 'application/json'
-    res = predictions.cpu().numpy().tolist()
-    return json.dumps(res)
+    cwd = os.getcwd()
+    with open(cwd+'/idx_to_cls_map.json', 'r') as infile:
+        labels_map = json.load(infile)
+    res = np.exp(predictions.cpu().numpy().tolist())
+    outcome = {'predictions': []}
+    for sequential, sample in enumerate(res):
+        sample_data = {}
+        sample_data['sample_sequential'] = sequential
+        sample_data['result'] = {'class': labels_map[str(np.argmax(sample))], 'prob': max(sample)}
+        sample_data['class_probs'] = {labels_map[str(idx)]: prob for idx, prob in enumerate(sample)}
 
-"""
-model = model_fn('./src/pipe/inference/')
-import numpy as np
-import cv2
-from torchvision import transforms
+        outcome['predictions'].append(sample_data)
 
-image = cv2.imread('./data/source/MNISTMini/2/35.jpg', cv2.IMREAD_GRAYSCALE)
-if len(image.shape) == 2:
-    image = np.reshape(image, (image.shape[0], image.shape[1], 1))
-image = np.transpose(image, axes=(2, 0, 1))
-image = torch.from_numpy(image)/255
-transform = transforms.Resize((28, 28))
-image = transform(image)
-image = np.reshape(image, (1, 1, 28, 28))
-dummy_data = {"inputs": image.tolist()}
-#dummy_data = {"inputs": np.random.rand(16, 1, 28, 28).tolist()}
-input_object = input_fn(dummy_data, 'application/json')
-preds = predict_fn(input_object, model)
-print(np.argmax(np.exp(preds)))
-"""
+    return json.dumps(outcome)
+
