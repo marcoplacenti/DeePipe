@@ -4,6 +4,7 @@ from sagemaker.pytorch import PyTorchModel
 from sagemaker.pytorch.model import PyTorchPredictor
 from sagemaker.serializers import JSONSerializer
 from sagemaker.deserializers import JSONDeserializer
+from sagemaker.model_monitor import DataCaptureConfig
 
 import time
 import json
@@ -261,6 +262,7 @@ class AWSConnector:
 
     # TODO: implement data drifting monitoring
     # TODO: move "test inference client" away from here
+    # TODO: save data with predictions in s3 to use for later use
     def deploy(self, tarfile_name):
         session, role = self.get_sagemaker_role()
         
@@ -286,11 +288,18 @@ class AWSConnector:
             predictor_cls=PyTorchPredictor,
         )
 
+        data_capture_config = DataCaptureConfig(
+            enable_capture=True,
+            sampling_percentage=100,
+            #destination_s3_uri='s3://path/for/data/capture'
+        )
+
         predictor = model.deploy(
             instance_type='ml.m4.xlarge',
             initial_instance_count=1,
             #endpoint_name='mopc-ImageClassification',
-            #accelerator_type='ml.eia2.medium'
+            #accelerator_type='ml.eia2.medium',
+            data_capture_config=data_capture_config,
             serializer=JSONSerializer(),
             deserializer=JSONDeserializer()
         )
