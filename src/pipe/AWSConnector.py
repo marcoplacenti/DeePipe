@@ -8,10 +8,9 @@ from sagemaker.deserializers import JSONDeserializer
 import time
 import json
 import os
-import tarfile
+
 
 import wandb
-
 
 
 class AWSConnector:
@@ -33,7 +32,7 @@ class AWSConnector:
 
         iam_client = self.contrib_session.client('iam')
         self.__create_or_get_role__(iam_client, role_name)
-        self.put_role_policy(iam_client, role_name, 
+        self.__put_role_policy__(iam_client, role_name, 
                             'AllowS3-MLPipe', 
                             self.__get_s3_policy_document__())
 
@@ -67,15 +66,13 @@ class AWSConnector:
         self.contrib_session = self.get_contrib_session()
 
         role_name = 'mopc-s202798-'+self.project_name+'-Sagemaker'
-        #role_name = 'AmazonSageMaker-ExecutionRole-20210119T155723'
-        #role_name = 'sagemaker-execution-role'
 
         iam_client = self.contrib_session.client('iam')
         self.__create_or_get_role__(iam_client, role_name)
         response = iam_client.attach_role_policy(
             RoleName=role_name, PolicyArn='arn:aws:iam::aws:policy/AmazonSageMakerFullAccess')
 
-        self.put_role_policy(iam_client, role_name, 
+        self.__put_role_policy__(iam_client, role_name, 
                             'AllowSagemaker-MLPipe', 
                             self.__get_sagemaker_policy_document__())
 
@@ -117,7 +114,7 @@ class AWSConnector:
                 print(e)
                 exit()
 
-    def put_role_policy(self, iam_client, role_name, policy_name, policy_document):
+    def __put_role_policy__(self, iam_client, role_name, policy_name, policy_document):
         iam_client.put_role_policy(
             RoleName=role_name,
             PolicyName=policy_name,
@@ -236,13 +233,9 @@ class AWSConnector:
         - bucket: s3 bucket with target contents
         - client: initialized s3 client object
         """
-        keys = []
-        dirs = []
+        keys, dirs = [], []
         next_token = ''
-        base_kwargs = {
-            'Bucket':bucket,
-            'Prefix':prefix,
-        }
+        base_kwargs = {'Bucket': bucket, 'Prefix': prefix}
         while next_token is not None:
             kwargs = base_kwargs.copy()
             if next_token != '':
@@ -266,19 +259,14 @@ class AWSConnector:
                 os.makedirs(os.path.dirname(dest_pathname))
             client.download_file(bucket, k, dest_pathname)
 
-    def deploy(self):
-        with tarfile.open('./tmp/models/myModel.tar.gz', "w:gz") as tar:
-            tar.add('./src/pipe/inference/', arcname='.')
-            tar.add('./src/models/', arcname='./src/models/')
-
+    def deploy(self, tarfile_name):
         session, role = self.get_sagemaker_role()
         
         print("Role: ", role['Role']['Arn'])
 
-        
         sess = Session(boto_session=session, default_bucket=self.sagemaker_bucket_name)
 
-        model_data = sess.upload_data('./tmp/models/myModel.tar.gz', 
+        model_data = sess.upload_data(tarfile_name, 
                                 bucket=self.sagemaker_bucket_name,
                                 key_prefix='model/pytorch')
 

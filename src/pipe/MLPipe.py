@@ -24,6 +24,7 @@ import wandb
 import uuid
 import datetime
 import os
+import tarfile
 
 from src.data.make_dataset import ImageDataset
 from src.models.model import Model
@@ -131,6 +132,13 @@ class MLPipe():
             os.makedirs('./trials/'+self.PROJECT['experiment'])
 
 
+    def __set_data_params__(self, location, img_res, greyscale, test_size, folds):
+        self.DATA = {'location': location, 'img-res': img_res, 'greyscale': greyscale}
+        self.VALIDATION = {'test_size': test_size, 'folds': folds}
+
+        self.channels = (1 if self.DATA['greyscale'] else 3)
+
+
     def hold_out_split(self, batch_size):
         
         trainloader = DataLoader(self.trainset, 
@@ -167,12 +175,6 @@ class MLPipe():
     
         return trainloader_list, valloader_list, testloader
 
-
-    def __set_data_params__(self, location, img_res, greyscale, test_size, folds):
-        self.DATA = {'location': location, 'img-res': img_res, 'greyscale': greyscale}
-        self.VALIDATION = {'test_size': test_size, 'folds': folds}
-
-        self.channels = (1 if self.DATA['greyscale'] else 3)
 
     def preproc_data(self, location=None, img_res=None, greyscale=None, test_size=None, folds=None):
         if not self.config_file_flag:
@@ -354,8 +356,8 @@ class MLPipe():
         for ckpt in model_checkpoints:
             if '=' in ckpt:
                 os.rename('./tmp/models/checkpoints/'+ckpt, './tmp/models/checkpoints/'+ckpt.replace('=', '_'))
+        
         self.aws_connector.upload_artifacts('models', './tmp/models/checkpoints', self.PROJECT)
-
         self.aws_connector.upload_artifacts('models', './tmp/models/final/', self.PROJECT)
 
 
@@ -368,4 +370,8 @@ class MLPipe():
             print('Test set is empty. Step skipped.')
 
     def deploy(self):
-        self.aws_connector.deploy()
+        tarfile_name = './tmp/models/myModel.tar.gz'
+        with tarfile.open(tarfile_name, "w:gz") as tar:
+            tar.add('./src/pipe/inference/', arcname='.')
+            tar.add('./src/models/', arcname='./src/models/')
+        self.aws_connector.deploy(tarfile_name)
