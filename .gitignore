@@ -141,6 +141,7 @@ models/
 wandb/
 trials/
 lightning_logs/
+tune_hp/
 
 # other files
 set_environ.sh

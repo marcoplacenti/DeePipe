@@ -224,7 +224,7 @@ class AWSConnector:
         s3_client = session.client('s3')
 
         print("Downloading data, this may take a while...")
-        self.download_dir('MNISTMini/', 'data/', datasets_bucket_name, s3_client)
+        self.download_dir('MNISTMini/', destination, bucket_uri, s3_client)
 
     def download_dir(self, prefix, local, bucket, client):
         """
@@ -262,7 +262,7 @@ class AWSConnector:
 
     # TODO: implement data drifting monitoring
     # TODO: move "test inference client" away from here
-    # TODO: save data with predictions in s3 to use for later use
+    # TODO: save data with predictions in s3 to use for later use - DONE, TO TEST
     def deploy(self, tarfile_name):
         session, role = self.get_sagemaker_role()
         
@@ -291,7 +291,8 @@ class AWSConnector:
         data_capture_config = DataCaptureConfig(
             enable_capture=True,
             sampling_percentage=100,
-            #destination_s3_uri='s3://path/for/data/capture'
+            #destination_s3_uri='s3://path/for/data/capture',
+            sagemaker_session= sess
         )
 
         predictor = model.deploy(
