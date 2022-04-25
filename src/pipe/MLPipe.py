@@ -60,8 +60,6 @@ class MLPipe():
 
     def __set_aws_connector__(self):
         self.aws_connector = AWSConnector(self.PROJECT['name'])
-        #self.aws_connector.download_data('something', 'something')
-        #exit()
 
     def __parse_config_dict__(self, config_dict):
 
@@ -175,7 +173,7 @@ class MLPipe():
     
         return trainloader_list, valloader_list, testloader
 
-
+    # TODO: enable downloading when data location is s3
     def preproc_data(self, location=None, img_res=None, greyscale=None, test_size=None, folds=None):
         if not self.config_file_flag:
             self.__set_data_params__(location, img_res, greyscale, test_size, folds)
@@ -369,7 +367,8 @@ class MLPipe():
         else:
             print('Test set is empty. Step skipped.')
 
-    def deploy(self):
+    # TODO: only deploy when test requirements are met in config file - allow tarfile as args
+    def deploy(self, tarfile_name=None, inference_dir=None, model_dir=None):
         tarfile_name = './tmp/models/myModel.tar.gz'
         with tarfile.open(tarfile_name, "w:gz") as tar:
             tar.add('./src/pipe/inference/', arcname='.')

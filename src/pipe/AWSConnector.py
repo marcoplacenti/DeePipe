@@ -259,6 +259,8 @@ class AWSConnector:
                 os.makedirs(os.path.dirname(dest_pathname))
             client.download_file(bucket, k, dest_pathname)
 
+    # TODO: implement data drifting monitoring
+    # TODO: move "test inference client" away from here
     def deploy(self, tarfile_name):
         session, role = self.get_sagemaker_role()
         
