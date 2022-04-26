@@ -1,6 +1,6 @@
 project:
   name: ImageClassification
-  task: classification
+  task: Classification
 
 data:
   location: data/source/MNISTMini/
@@ -25,3 +25,8 @@ tuning:
 validation:
   test_size: 0.2 # ignored if a presplit test dataset is provided
   folds: 2
+
+deployment:
+  min_test_score: 0.80
+  endpoint_name: MOPCTestEndpoint
+  instance_type: ml.m4.xlarge

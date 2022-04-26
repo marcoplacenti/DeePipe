@@ -9,7 +9,7 @@ from sagemaker.model_monitor import DataCaptureConfig
 import time
 import json
 import os
-
+import logging
 
 import wandb
 
@@ -112,7 +112,7 @@ class AWSConnector:
             if e.response['Error']['Code'] == 'EntityAlreadyExists':
                 pass
             else:
-                print(e)
+                logging.critical(e)
                 exit()
 
     def __put_role_policy__(self, iam_client, role_name, policy_name, policy_document):
@@ -217,13 +217,12 @@ class AWSConnector:
 
         del s3_client
         del session
-        #wandb.finish()
 
     def download_data(self, bucket_uri, destination):
         session = self.S3_session()
         s3_client = session.client('s3')
 
-        print("Downloading data, this may take a while...")
+        logging.info("Downloading data, this may take a while...")
         self.download_dir('MNISTMini/', destination, bucket_uri, s3_client)
 
     def download_dir(self, prefix, local, bucket, client):
@@ -263,19 +262,13 @@ class AWSConnector:
     # TODO: implement data drifting monitoring
     # TODO: move "test inference client" away from here
     # TODO: save data with predictions in s3 to use for later use - DONE, TO TEST
-    def deploy(self, tarfile_name):
+    def deploy(self, tarfile_name, endpoint_name, instance_type):
         session, role = self.get_sagemaker_role()
-        
-        print("Role: ", role['Role']['Arn'])
-
         sess = Session(boto_session=session, default_bucket=self.sagemaker_bucket_name)
 
         model_data = sess.upload_data(tarfile_name, 
                                 bucket=self.sagemaker_bucket_name,
                                 key_prefix='model/pytorch')
-
-        print("tar.gz file: ", model_data)
-
         
         model = PyTorchModel(
             entry_point='inference.py',
@@ -292,13 +285,13 @@ class AWSConnector:
             enable_capture=True,
             sampling_percentage=100,
             #destination_s3_uri='s3://path/for/data/capture',
-            sagemaker_session= sess
+            sagemaker_session=sess
         )
 
         predictor = model.deploy(
-            instance_type='ml.m4.xlarge',
+            instance_type=instance_type,
             initial_instance_count=1,
-            #endpoint_name='mopc-ImageClassification',
+            endpoint_name=endpoint_name,
             #accelerator_type='ml.eia2.medium',
             data_capture_config=data_capture_config,
             serializer=JSONSerializer(),
