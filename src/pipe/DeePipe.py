@@ -50,7 +50,8 @@ class DeePipe():
             assert task
             self.PROJECT = {'name': name, 'task': task}
             if not experiment:
-                experiment = str(datetime.datetime.now())+'-'+str(uuid.uuid4().hex)
+                exp_id = str(uuid.uuid4().hex)
+                experiment = str(datetime.datetime.now())+'-'+exp_id
             self.PROJECT['experiment'] = experiment
             self.__set_aws_connector__()   
         else:
@@ -67,9 +68,12 @@ class DeePipe():
             if self.configurator.get_train_flag():
                 self.train()
             if self.configurator.get_evaluation_flag():
-                self.eval()
+                test_score = self.eval()
             if self.configurator.get_deployment_flag():
-                self.deploy()
+                if test_score >= self.DEPLOYMENT['min_test_score']:
+                    self.deploy(tarfile_name='./tmp/models/myModel.tar.gz',
+                                inference_dir='./src/pipe/inference/',
+                                model_dir='./src/models/')
             
 
     def __set_aws_connector__(self):
@@ -89,7 +93,8 @@ class DeePipe():
         try:
             self.PROJECT['experiment']
         except KeyError:
-            self.PROJECT['experiment'] = str(datetime.datetime.now())+'-'+str(uuid.uuid4().hex)
+            exp_id = str(uuid.uuid4().hex)
+            self.PROJECT['experiment'] = str(datetime.datetime.now())+'-'+exp_id
 
         self.channels = (1 if self.DATA['greyscale'] else 3)
 
@@ -312,8 +317,8 @@ class DeePipe():
         
         self.trainer.fit(self.net, self.trainloader)
 
-        model_scripted = self.net.to_torchscript()#torch.jit.script(self.net) # Export to TorchScript
-        torch.jit.save(model_scripted, './tmp/models/final.pth') # Save
+        model_scripted = self.net.to_torchscript()
+        torch.jit.save(model_scripted, './tmp/models/final.pth')
 
     def train(self, model=None, max_epochs=None, batch_size=None, optimizer=None, learning_rate=None, number_trials=None):
         if not self.config_file_flag:
@@ -332,10 +337,6 @@ class DeePipe():
                 max_t=self.TRAINING_HP['max_epochs'],
                 grace_period=1,
                 reduction_factor=2)
-
-            #reporter = CLIReporter(
-            #    parameter_columns=["layer_1_size", "layer_2_size", "lr", "batch_size"],
-            #    metric_columns=["loss", "mean_accuracy", "training_iteration"])
 
             analysis = tune.run(
                 trainable,
@@ -359,9 +360,7 @@ class DeePipe():
 
             self.aws_connector.upload_artifacts('trials', './trials/'+self.PROJECT['experiment'], self.PROJECT)
 
-            final_config = analysis.best_config
-            
-            self.train_opt(final_config)
+            self.train_opt(analysis.best_config)
             
         else:
             self.train_opt(self.hp)
@@ -377,16 +376,15 @@ class DeePipe():
 
     def eval(self):
         if len(self.testloader) > 0:
-            self.trainer.test(self.net, self.testloader)
-            
-            #wandb.log({"Accuracy Test Set": (100*correct/total).item()})
+            test_score = self.trainer.test(self.net, self.testloader)
+            return test_score
         else:
             logging.info("Test set is empty. Step skipped.")
 
-    # TODO: only deploy when test requirements are met in config file - allow tarfile as args
-    def deploy(self, tarfile_name=None, inference_dir=None, model_dir=None):
-        tarfile_name = './tmp/models/myModel.tar.gz'
+    # TODO: only deploy when test requirements are met in config file - DONE, TO TEST
+    def deploy(self, tarfile_name, inference_dir, model_dir):
         with tarfile.open(tarfile_name, "w:gz") as tar:
-            tar.add('./src/pipe/inference/', arcname='.')
-            tar.add('./src/models/', arcname='./src/models/')
+            tar.add(inference_dir, arcname='.')
+            tar.add(model_dir, arcname='./src/models/')
         self.aws_connector.deploy(tarfile_name, self.DEPLOYMENT['endpoint_name'], self.DEPLOYMENT['instance_type'])
+

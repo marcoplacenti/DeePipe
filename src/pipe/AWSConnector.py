@@ -260,7 +260,6 @@ class AWSConnector:
             client.download_file(bucket, k, dest_pathname)
 
     # TODO: implement data drifting monitoring
-    # TODO: move "test inference client" away from here
     # TODO: save data with predictions in s3 to use for later use - DONE, TO TEST
     def deploy(self, tarfile_name, endpoint_name, instance_type):
         session, role = self.get_sagemaker_role()
@@ -300,30 +299,3 @@ class AWSConnector:
 
         print("Endpoint name: ", predictor.endpoint_name)
 
-        import numpy as np
-        import cv2
-        from torchvision import transforms
-        import torch
-
-        images = [
-            './data/source/MNISTMini/2/35.jpg',
-            './data/source/MNISTMini/4/6.jpg',
-            './data/source/MNISTMini/7/17.jpg'
-        ]
-        for path in images:
-            image = cv2.imread(path, cv2.IMREAD_GRAYSCALE)
-            if len(image.shape) == 2:
-                image = np.reshape(image, (image.shape[0], image.shape[1], 1))
-            image = np.transpose(image, axes=(2, 0, 1))
-            image = torch.from_numpy(image)/255
-            transform = transforms.Resize((28, 28))
-            image = transform(image)
-            image = np.reshape(image, (1, 1, 28, 28))
-            dummy_data = {"inputs": image.tolist()}
-            
-
-            #dummy_data = {"inputs": np.random.rand(16, 1, 28, 28).tolist()}
-            
-            res = predictor.predict(dummy_data)
-            print(path, res['predictions'])
-            print("\n")

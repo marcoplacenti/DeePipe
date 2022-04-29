@@ -68,6 +68,7 @@ class Model(pl.LightningModule):
     def test_epoch_end(self, outputs):
         avg_acc = torch.stack([x['test_acc'] for x in outputs]).mean()
         self.log("ptl/test_acc", avg_acc)
+        return avg_acc
 
     def configure_optimizers(self):
         if self.optimizer.lower() == 'adam':
