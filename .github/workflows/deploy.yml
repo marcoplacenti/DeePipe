@@ -18,10 +18,11 @@ jobs:
         python-version: 3.9
     - name: Install pypa/build
       run: >-
-        python -m 
+        python -m venv .
         pip install --upgrade pip
+        pip install -r requirements.txt
         build
-        -- user
+        --user
     - name: Build a binary wheel and a source tarball
       run: >-
         python -m
