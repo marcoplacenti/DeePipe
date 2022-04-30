@@ -1,14 +1,12 @@
 import os
 import pandas as pd
 import numpy as np
+import json
 
-from PIL import Image
 import cv2
 
 import torch
 from torch.utils.data import Dataset
-from torchvision.io import read_image
-from torchvision import transforms
 
 
 class ImageDataset(Dataset):
@@ -41,18 +39,20 @@ class ImageDataset(Dataset):
 
     def make_annotations(self):
         annotations = []
-        class_idx = -1
-        for idx, dir in enumerate(os.listdir(self.img_dir)):
+        idx_to_class_map = {}
+        idx = 0
+        for _, dir in enumerate(os.listdir(self.img_dir)):
             if os.path.isdir("/".join([self.img_dir, dir])):
-                class_idx += 1
+                idx_to_class_map[idx] = dir
                 for img in os.listdir("/".join([self.img_dir, dir])):
-                    annotations.append(["/".join([dir, img]), class_idx])
+                    annotations.append(["/".join([dir, img]), idx])
+                idx += 1
+
+        with open('./src/pipe/inference/idx_to_cls_map.json', 'w') as fp:
+            json.dump(idx_to_class_map, fp)
 
         return annotations
             
     def get_num_classes(self):
         return len(set(self.image_labels['label']))
-
-    
-
 

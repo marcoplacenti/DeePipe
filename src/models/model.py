@@ -8,15 +8,16 @@ from torchvision import transforms
 import pytorch_lightning as pl
 
 class Model(pl.LightningModule):
-    def __init__(self, architecture, hp, loss_func):
+    def __init__(self):
         super(Model, self).__init__()
 
-        self.optimizer = hp['optimizer']
-        self.lr = hp['lr']
-        self.loss_func = loss_func
-
+    def set_architecture(self, architecture):
         self.model = architecture
 
+    def set_hyperparameters(self, optimizer, lr, loss_func):
+        self.optimizer = optimizer
+        self.lr = lr
+        self.loss_func = loss_func
         
     def forward(self, x):
         return self.model(x)
@@ -67,9 +68,20 @@ class Model(pl.LightningModule):
     def test_epoch_end(self, outputs):
         avg_acc = torch.stack([x['test_acc'] for x in outputs]).mean()
         self.log("ptl/test_acc", avg_acc)
+        return avg_acc
 
     def configure_optimizers(self):
         if self.optimizer.lower() == 'adam':
             return torch.optim.Adam(self.parameters(), 
                             lr=self.lr)
 
+    def predict_step(self, batch, batch_idx):
+        # enable Monte Carlo Dropout
+        self.dropout = nn.Dropout()
+        self.dropout.train()
+
+        # take average of `self.mc_iteration` iterations
+        preds = []
+        preds = [self.model(item) for item in batch]
+        return preds
+        

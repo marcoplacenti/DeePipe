@@ -1,4 +1,4 @@
--e .
+-e git+https://github.com/marcoplacenti/MLPipe.git@8465d61b17fcbc7eea6a110d80e6b10141e70fc3#egg=src
 torch
 torchvision
 numpy
@@ -7,7 +7,6 @@ opencv-python
 pillow
 argparse
 pyyaml
-yamale
 scikit-learn
 wandb
 uuid
@@ -16,3 +15,4 @@ pytorch-lightning-bolts
 ray[tune]
 boto3
 botocore
+sagemaker
