@@ -23,6 +23,10 @@ jobs:
         build
         --user
 
+    - name: Install dependencies
+      run: >-
+        pip install -r requirements.txt
+
     - name: Build a binary wheel and a source tarball
       run: >-
         python -m
