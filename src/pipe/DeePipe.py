@@ -1,6 +1,4 @@
 import torch
-import torch.nn as nn
-
 from torch.utils.data import DataLoader
 from torchvision import transforms
 
@@ -9,30 +7,26 @@ from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.callbacks.early_stopping import EarlyStopping
 from pytorch_lightning.loggers import WandbLogger
 
-
+import ray
 from ray.tune.integration.pytorch_lightning import TuneReportCallback
 from ray.tune.integration.wandb import WandbLoggerCallback
 from ray.tune.schedulers import ASHAScheduler
-from ray.tune import CLIReporter
 from ray import tune
-import ray
 
 from sklearn.model_selection import KFold
-
-import wandb
 
 import uuid
 import datetime
 import os
 import tarfile
-
 import logging
 
 from src.data.make_dataset import ImageDataset
 from src.models.model import Model
-from src.pipe.AWSConnector import AWSConnector
-from src.pipe.Configurator import Configurator
 from src.models.architectures import *
+from src.pipe.Connectors import AWSConnector
+from src.pipe.Configurator import Configurator
+
 
 
 TUNE_ORIG_WORKING_DIR = os.getcwd()
@@ -193,7 +187,7 @@ class DeePipe():
     
         return trainloader_list, valloader_list, testloader
 
-    # TODO: enable downloading when data location is s3
+    # TODO: enable downloading when data location is s3 - DONE, TO TEST
     def preproc_data(self, location=None, img_res=None, greyscale=None, test_size=None, folds=None):
         if not self.config_file_flag:
             self.__set_data_params__(location, img_res, greyscale, test_size, folds)
@@ -203,6 +197,13 @@ class DeePipe():
         transform = transforms.Resize((
                         self.DATA['img-res'][0], 
                         self.DATA['img-res'][1]))
+
+        if self.DATA['location'].startswith('S3://'):
+            self.aws_connector.download_data(
+                            bucket_uri=self.DATA['location'],
+                            prefix='MNISTMini/',
+                            destination='./data/source/')
+            self.DATA['location'] = 'data/source/MNISTMini/'
 
         self.dataset = ImageDataset(
                         data_dir=self.DATA['location'],
