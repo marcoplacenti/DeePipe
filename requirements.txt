@@ -16,3 +16,4 @@ ray[tune]
 boto3
 botocore
 sagemaker
+python-dotenv
