@@ -20,9 +20,9 @@ jobs:
       run: >-
         python -m venv .
         pip install --upgrade pip
-        pip install -r requirements.txt
         build
         --user
+
     - name: Build a binary wheel and a source tarball
       run: >-
         python -m
