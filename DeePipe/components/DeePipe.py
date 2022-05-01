@@ -21,11 +21,11 @@ import os
 import tarfile
 import logging
 
-from src.data.make_dataset import ImageDataset
-from src.models.model import Model
-from src.models.architectures import *
-from src.pipe.Connectors import AWSConnector
-from src.pipe.Configurator import Configurator
+from DeePipe.data.make_dataset import ImageDataset
+from DeePipe.models.model import Model
+from DeePipe.models.architectures import *
+from DeePipe.components.Connectors import AWSConnector
+from DeePipe.components.Configurator import Configurator
 
 
 
