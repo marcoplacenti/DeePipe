@@ -24,7 +24,7 @@ import cv2
 import tarfile
 import logging
 
-from DeePipe.data.make_dataset import ImageDataset
+from DeePipe.data.ImageDataset import ImageDataset
 from DeePipe.models.model import Model
 from DeePipe.models.architectures import *
 from DeePipe.components.Connectors import AWSConnector
@@ -37,7 +37,7 @@ os.environ['WANDB_SILENT']="true"
 
 logging.getLogger().setLevel(logging.INFO)
 
-class DeePipe():
+class DeePipe:
 
     def __init__(self):
         pass
