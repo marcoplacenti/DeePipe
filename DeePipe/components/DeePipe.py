@@ -18,6 +18,9 @@ from sklearn.model_selection import KFold
 import uuid
 import datetime
 import os
+import json
+import numpy as np
+import cv2
 import tarfile
 import logging
 
@@ -36,8 +39,11 @@ logging.getLogger().setLevel(logging.INFO)
 
 class DeePipe():
 
-    def __init__(self, config_file=None, name=None, experiment=None, task=None):
+    def __init__(self):
+        pass
+        
 
+    def init(self, config_file=None, name=None, experiment=None, task=None):
         if not config_file:
             self.config_file_flag = False
             assert name
@@ -388,4 +394,28 @@ class DeePipe():
             tar.add(inference_dir, arcname='.')
             tar.add(model_dir, arcname='./src/models/')
         self.aws_connector.deploy(tarfile_name, self.DEPLOYMENT['endpoint_name'], self.DEPLOYMENT['instance_type'])
+
+    def predict(self, project_name, endpoint, images_path):
+        connector = AWSConnector(project_name=project_name)
+        session, _ = connector.get_Sagemaker_session_role()
+        runtime = session.client('sagemaker-runtime')
+
+        res = {"Response": []}
+        for path in images_path:
+            image = cv2.imread(path, cv2.IMREAD_GRAYSCALE)
+            if len(image.shape) == 2:
+                image = np.reshape(image, (image.shape[0], image.shape[1], 1))
+            image = np.transpose(image, axes=(2, 0, 1))
+            image = torch.from_numpy(image)/255
+            transform = transforms.Resize((28, 28))
+            image = transform(image)
+            image = np.reshape(image, (1, 1, 28, 28))
+            dummy_data = {"inputs": image.tolist()}
+            
+            response = runtime.invoke_endpoint(EndpointName=endpoint, ContentType='application/json', Body=json.dumps(dummy_data))
+
+            result = json.loads(response['Body'].read().decode())
+            res['Response'].append(result)
+
+        return res
 
