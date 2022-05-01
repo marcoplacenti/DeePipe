@@ -224,7 +224,7 @@ class DeePipe:
                         channels=self.channels,
                         transform=transform
             )
-
+            
             self.dataset = self.trainset
 
         else: 
