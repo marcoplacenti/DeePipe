@@ -1,8 +1,13 @@
 from setuptools import find_packages, setup
+import os
+
+with open('requirements.txt') as f:
+    required = f.read().splitlines()
 
 setup(
     name='DeePipe',
     packages=find_packages(),
+    install_requires=required,
     version='0.0.1',
     description='DL Pipeline',
     author='MOPC',
