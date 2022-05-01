@@ -397,6 +397,7 @@ class DeePipe:
             tar.add(models_dirname+'/models/', arcname='./src/models/')
         self.aws_connector.deploy(tarfile_name, endpoint_name, instance_type)
 
+
     def predict(self, project_name, endpoint, images_path):
         connector = AWSConnector(project_name=project_name)
         session, _ = connector.get_Sagemaker_session_role()
