@@ -70,10 +70,10 @@ class DeePipe:
             if self.configurator.get_evaluation_flag():
                 test_score = self.eval()
             if self.configurator.get_deployment_flag():
-                if test_score >= self.DEPLOYMENT['min_test_score']:
+                if test_score['ptl/test_acc'] >= self.DEPLOYMENT['min_test_score']:
                     self.deploy(tarfile_name='./.tmp/models/myModel.tar.gz',
                                 endpoint_name=self.DEPLOYMENT['endpoint_name'], 
-                                innstance_type=self.DEPLOYMENT['instance_type'])
+                                instance_type=self.DEPLOYMENT['instance_type'])
             
 
     def __set_aws_connector__(self):
@@ -205,18 +205,12 @@ class DeePipe:
                         self.DATA['img-res'][1]))
 
         if self.DATA['location'].startswith('S3://'):
+            key_split = self.DATA['location'].split('/')
             self.aws_connector.download_data(
                             bucket_uri=self.DATA['location'],
-                            prefix='MNISTMini/',
+                            prefix=key_split[-2],
                             destination='./data/source/')
             self.DATA['location'] = 'data/source/MNISTMini/'
-
-        self.dataset = ImageDataset(
-                        data_dir=self.DATA['location'],
-                        channels=self.channels,
-                        transform=transform)
-
-        torch.save(self.dataset, './data/raw/'+self.DATA['location'].split('/')[2]+'/dataset.pt')
 
         if set(['training', 'testing']).issubset(os.listdir(self.DATA['location'])):
             self.trainset = ImageDataset(
@@ -231,7 +225,16 @@ class DeePipe:
                         transform=transform
             )
 
+            self.dataset = self.trainset
+
         else: 
+            self.dataset = ImageDataset(
+                        data_dir=self.DATA['location'],
+                        channels=self.channels,
+                        transform=transform)
+            
+            torch.save(self.dataset, './data/raw/'+self.DATA['location'].split('/')[2]+'/dataset.pt')
+
             test_size = int(self.VALIDATION['test_size'] * len(self.dataset))
             train_size = len(self.dataset) - test_size
             self.trainset, self.testset = torch.utils.data.random_split(self.dataset, 

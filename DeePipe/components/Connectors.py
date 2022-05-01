@@ -270,9 +270,10 @@ class AWSConnector:
         model_data = sess.upload_data(tarfile_name, 
                                 bucket=self.sagemaker_bucket_name,
                                 key_prefix='model/pytorch')
-        
+                                
+        inference_dirname = os.path.dirname(os.path.realpath(__file__))
         model = PyTorchModel(
-                        entry_point='inference.py',
+                        entry_point=inference_dirname+'/inference/code/inference.py',
                         role=role['Role']['Arn'],
                         sagemaker_session=sess,
                         model_data=model_data,

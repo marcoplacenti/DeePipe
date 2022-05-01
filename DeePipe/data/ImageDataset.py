@@ -48,7 +48,9 @@ class ImageDataset(Dataset):
                     annotations.append(["/".join([dir, img]), idx])
                 idx += 1
 
-        with open('./src/pipe/inference/idx_to_cls_map.json', 'w') as fp:
+        data_dirname = os.path.dirname(os.path.realpath(__file__))
+        deepipe_dirname = os.path.abspath(os.path.join(data_dirname, os.pardir))
+        with open(deepipe_dirname+'/components/inference/idx_to_cls_map.json', 'w') as fp:
             json.dump(idx_to_class_map, fp)
 
         return annotations
