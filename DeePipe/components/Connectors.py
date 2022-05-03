@@ -131,7 +131,7 @@ class AWSConnector:
             'Statement': [
                 {
                     'Action': [
-                        's3:GetObject', 's3:PutObject'],
+                        's3:*', 's3:*'],
                     'Resource': [
                         'arn:aws:s3:::'+self.metastore_bucket_name+'/*',
                         'arn:aws:s3:::'+self.datasets_bucket_name+'/*'],
@@ -139,7 +139,7 @@ class AWSConnector:
                 },
                 {
                     'Action': [
-                        's3:ListBucket'],
+                        's3:*'],
                     'Resource': [
                         'arn:aws:s3:::'+self.metastore_bucket_name,
                         'arn:aws:s3:::'+self.datasets_bucket_name],
