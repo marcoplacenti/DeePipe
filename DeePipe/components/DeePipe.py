@@ -41,7 +41,6 @@ class DeePipe:
 
     def __init__(self):
         pass
-        
 
     def init(self, config_file=None, name=None, experiment=None, task=None):
         if not config_file:
@@ -70,8 +69,8 @@ class DeePipe:
             if self.configurator.get_evaluation_flag():
                 test_score = self.eval()
             if self.configurator.get_deployment_flag():
-                if test_score['ptl/test_acc'] >= self.DEPLOYMENT['min_test_score']:
-                    self.deploy(tarfile_name='./.tmp/models/myModel.tar.gz',
+                if test_score[0]['ptl/test_acc'] >= self.DEPLOYMENT['min_test_score']:
+                    self.deploy(tarfile_name='./tmp/myModel.tar.gz',
                                 endpoint_name=self.DEPLOYMENT['endpoint_name'], 
                                 instance_type=self.DEPLOYMENT['instance_type'])
             
@@ -80,7 +79,6 @@ class DeePipe:
         self.aws_connector = AWSConnector(self.PROJECT['name'])
 
     def __parse_config_dict__(self, config_dict):
-
         self.DATA = config_dict['data']
         self.MODEL_ARCHITECTURE = config_dict['model_architecture']
         self.TRAINING_HP = config_dict['training']
@@ -393,11 +391,13 @@ class DeePipe:
 
     # TODO: only deploy when test requirements are met in config file - DONE, TO TEST
     def deploy(self, tarfile_name, endpoint_name, instance_type):
-        inference_dirname = os.path.dirname(os.path.realpath(__file__))
-        models_dirname = os.path.abspath(os.path.join(inference_dirname, os.pardir))
+        components_dirname = os.path.dirname(os.path.realpath(__file__))
+        deepipe_dirname = os.path.abspath(os.path.join(components_dirname, os.pardir))
+
         with tarfile.open(tarfile_name, "w:gz") as tar:
-            tar.add(inference_dirname+'/inference/', arcname='.')
-            tar.add(models_dirname+'/models/', arcname='./src/models/')
+            tar.add(components_dirname+'/inference/', arcname='.')
+            tar.add(deepipe_dirname+'/models/', arcname='./src/models/')
+            tar.add('./tmp/models/', arcname='.')
         self.aws_connector.deploy(tarfile_name, endpoint_name, instance_type)
 
 
