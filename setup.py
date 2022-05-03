@@ -7,7 +7,7 @@ setup(
     name='DeePipe',
     packages=find_packages(),
     install_requires=required,
-    version='0.3.1',
+    version='0.3.2',
     description='The AWS based Deep Learning Pipeline Framework',
     author='MOPC',
     author_email="s202798@student.dtu.dk",
