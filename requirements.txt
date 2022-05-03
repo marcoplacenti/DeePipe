@@ -11,7 +11,7 @@ wandb
 uuid
 pytorch-lightning
 pytorch-lightning-bolts
-ray[tune]
+ray
 boto3
 botocore
 sagemaker
