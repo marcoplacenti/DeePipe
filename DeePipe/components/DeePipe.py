@@ -396,7 +396,7 @@ class DeePipe:
 
         with tarfile.open(tarfile_name, "w:gz") as tar:
             tar.add(components_dirname+'/inference/', arcname='.')
-            tar.add(deepipe_dirname+'/models/', arcname='./src/models/')
+            #tar.add(deepipe_dirname+'/models/', arcname='./src/models/')
             tar.add('./tmp/models/', arcname='.')
         self.aws_connector.deploy(tarfile_name, endpoint_name, instance_type)
 
