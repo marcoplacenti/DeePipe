@@ -103,7 +103,7 @@ class Configurator:
         model = self.config_dict['model_architecture']
         architecture = model['name']
 
-        clsmembers = [model[0] for model in inspect.getmembers(sys.modules['DeePipe.models.architectures'], inspect.isclass)]
+        clsmembers = [model[0] for model in inspect.getmembers(sys.modules['deeppype.models.architectures'], inspect.isclass)]
         if architecture not in clsmembers:
             self.is_valid = False
             raise ValueError("Provided model architecture name is not supported. "+
