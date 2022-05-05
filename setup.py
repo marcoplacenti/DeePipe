@@ -1,13 +1,35 @@
 from setuptools import find_packages, setup
 
-with open('requirements.txt') as f:
-    required = f.read().splitlines()
+#with open('requirements.txt') as f:
+#    required = f.read().splitlines()
+
+install_requires = [
+    "torch",
+    "torchvision",
+    "numpy",
+    "pandas",
+    "opencv-python",
+    "pillow",
+    "argparse",
+    "pyyaml",
+    "scikit-learn",
+    "wandb",
+    "uuid",
+    "pytorch-lightning",
+    "pytorch-lightning-bolts",
+    "ray[tune]",
+    "boto3",
+    "botocore",
+    "sagemaker",
+    "python-dotenv",
+]
 
 setup(
     name='DeePipe',
     packages=find_packages(),
-    install_requires=required,
-    version='0.3.4',
+    install_requires=install_requires,
+    python_requires=">=3.9",
+    version='0.3.5',
     description='The AWS based Deep Learning Pipeline Framework',
     author='MOPC',
     author_email="s202798@student.dtu.dk",

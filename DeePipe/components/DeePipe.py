@@ -37,12 +37,12 @@ os.environ['WANDB_SILENT']="true"
 
 logging.getLogger().setLevel(logging.INFO)
 
-class DeePipe:
+class Pipe:
 
     def __init__(self):
         pass
 
-    def init(self, config_file=None, name=None, experiment=None, task=None):
+    def launch(self, config_file=None, name=None, experiment=None, task=None):
         if not config_file:
             self.config_file_flag = False
             assert name
@@ -396,7 +396,7 @@ class DeePipe:
 
         with tarfile.open(tarfile_name, "w:gz") as tar:
             tar.add(components_dirname+'/inference/', arcname='.')
-            #tar.add(deepipe_dirname+'/models/', arcname='./src/models/')
+            tar.add(deepipe_dirname+'/models/', arcname='./src/models/')
             tar.add('./tmp/models/', arcname='.')
         self.aws_connector.deploy(tarfile_name, endpoint_name, instance_type)
 
