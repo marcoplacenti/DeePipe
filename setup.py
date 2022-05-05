@@ -25,13 +25,13 @@ install_requires = [
 ]
 
 setup(
-    name='DeePipe',
+    name='deeppype',
     packages=find_packages(),
     install_requires=install_requires,
     python_requires=">=3.9",
-    version='0.3.5',
+    version='0.1.0',
     description='The AWS based Deep Learning Pipeline Framework',
-    author='MOPC',
+    author='Marco Placenti',
     author_email="s202798@student.dtu.dk",
     license='MIT',
     project_urls={

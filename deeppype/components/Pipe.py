@@ -24,11 +24,11 @@ import cv2
 import tarfile
 import logging
 
-from DeePipe.data.ImageDataset import ImageDataset
-from DeePipe.models.model import Model
-from DeePipe.models.architectures import *
-from DeePipe.components.Connectors import AWSConnector
-from DeePipe.components.Configurator import Configurator
+from deeppype.data.ImageDataset import ImageDataset
+from deeppype.models.model import Model
+from deeppype.models.architectures import *
+from deeppype.components.Connectors import AWSConnector
+from deeppype.components.Configurator import Configurator
 
 
 
