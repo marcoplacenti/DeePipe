@@ -35,6 +35,6 @@ setup(
     author_email="s202798@student.dtu.dk",
     license='MIT',
     project_urls={
-        "Source Code": 'https://github.com/marcoplacenti/DeePipe'
+        "Source Code": 'https://github.com/marcoplacenti/deeppype'
     }
 )
