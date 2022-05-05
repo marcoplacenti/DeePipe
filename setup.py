@@ -29,7 +29,7 @@ setup(
     packages=find_packages(),
     install_requires=install_requires,
     python_requires=">=3.9",
-    version='0.1.0',
+    version='0.4.0',
     description='The AWS based Deep Learning Pipeline Framework',
     author='Marco Placenti',
     author_email="s202798@student.dtu.dk",
