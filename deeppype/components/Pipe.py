@@ -394,6 +394,13 @@ class Pipe:
         components_dirname = os.path.dirname(os.path.realpath(__file__))
         deepipe_dirname = os.path.abspath(os.path.join(components_dirname, os.pardir))
 
+        # TODO: fix this shameful ugliness
+        with open(components_dirname+'/inference/code/requirements.txt', 'w') as req_file:
+            req_file.write("torch\n")
+            req_file.write("pytorch-lightning\n")
+
+        # TODO: find a way to include requirements.txt in tar file. By default it's ignored
+        #       which causes an error when invoking the endpoint
         with tarfile.open(tarfile_name, "w:gz") as tar:
             tar.add(components_dirname+'/inference/', arcname='.')
             tar.add(deepipe_dirname+'/models/', arcname='./src/models/')
